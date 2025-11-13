@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fumadocs AsyncAPI preset styles */
+.asyncapi-page {
+  /* Base styles for AsyncAPI documentation */
+}
+
+.asyncapi-channel {
+  /* Channel-specific styles */
+}
+
+.asyncapi-operation {
+  /* Operation-specific styles */
+}
+
+.asyncapi-message {
+  /* Message-specific styles */
+}
+
+.asyncapi-playground {
+  /* Playground-specific styles */
+}

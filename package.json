@@ -1,0 +1,94 @@
+{
+  "name": "fumadocs-asyncapi",
+  "version": "0.1.0",
+  "description": "AsyncAPI integration for Fumadocs - generate documentation pages from AsyncAPI specifications with WebSocket client support",
+  "keywords": [
+    "asyncapi",
+    "documentation",
+    "fumadocs",
+    "websocket",
+    "api",
+    "docs",
+    "nextjs",
+    "react"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/fumadocs-asyncapi.git"
+  },
+  "license": "MIT",
+  "author": "Your Name <your.email@example.com>",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./ui": {
+      "types": "./dist/ui/index.d.ts",
+      "import": "./dist/ui/index.js"
+    },
+    "./css/preset.css": "./dist/css/preset.css"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun run build:lib && bun run build:css",
+    "build:lib": "tsup",
+    "build:css": "tailwindcss -i ./src/styles/preset.css -o ./dist/css/preset.css --minify",
+    "dev": "tsup --watch",
+    "dev:css": "tailwindcss -i ./src/styles/preset.css -o ./dist/css/preset.css --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write .",
+    "test": "bunx vitest",
+    "test:ui": "bunx vitest --ui",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@asyncapi/parser": "^3.0.0",
+    "fumadocs-core": "^13.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "yaml": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-react": "^7.33.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "postcss": "^8.4.0",
+    "prettier": "^3.0.0",
+    "tailwindcss": "^3.4.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "next": "^13.0.0 || ^14.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
