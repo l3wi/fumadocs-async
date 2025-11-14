@@ -6,17 +6,26 @@ import { useOptionalWSClient } from '../../components/ws-client'
 interface OperationActionsProps {
   operation: OperationInfo
   message?: MessageInfo
+  payload?: unknown
+  className?: string
 }
 
-export function OperationActions({ operation, message }: OperationActionsProps) {
+export function OperationActions({
+  operation,
+  message,
+  payload,
+  className,
+}: OperationActionsProps) {
   const client = useOptionalWSClient()
 
   if (!client) return null
 
   const handleLoadDraft = () => {
+    const payloadValue =
+      payload ?? message?.examples?.[0] ?? message?.schema ?? message?.payload ?? {}
     client.pushDraft({
       channel: operation.channel,
-      payload: message?.examples?.[0] ?? message?.schema ?? {},
+      payload: payloadValue,
     })
   }
 
@@ -24,9 +33,9 @@ export function OperationActions({ operation, message }: OperationActionsProps) 
     <button
       type="button"
       onClick={handleLoadDraft}
-      className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-[11px] font-medium text-foreground transition hover:bg-muted"
+      className={`inline-flex items-center justify-center rounded-md border border-border/70 bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition hover:bg-muted ${className ?? ''}`}
     >
-      Load into WebSocket client
+      Load
     </button>
   )
 }

@@ -23,26 +23,48 @@ export function processDocument(
 ): ProcessedAsyncDocument {
   const channels: ChannelInfo[] = []
   const operations: OperationInfo[] = []
+  const channelMap = new Map<string, ChannelInfo>()
+  const seenOperationPointers = new Set<string>()
 
   const channelCollection = document.allChannels()
   for (const channel of channelCollection.all()) {
-    const channelInfo: ChannelInfo = {
-      name: channel.id() ?? channel.address() ?? channel.meta().pointer,
-      description: channel.description() ?? undefined,
-      tags: extractTagNamesFromJson(
-        (channel.json() as { tags?: Array<{ name?: string }> }).tags
-      ),
-      operations: [],
-    }
-
+    const channelInfo = resolveChannelInfo(channel, channelMap, channels)
     const channelOperations = channel.operations()
     for (const operation of channelOperations.all()) {
+      const pointer = operation.meta().pointer
+      if (pointer) {
+        seenOperationPointers.add(pointer)
+      }
       const operationInfo = mapOperation(operation, channelInfo.name)
       channelInfo.operations.push(operationInfo)
       operations.push(operationInfo)
     }
+  }
 
-    channels.push(channelInfo)
+  const globalOperations = document.allOperations().all()
+  for (const operation of globalOperations) {
+    const pointer = operation.meta().pointer
+    if (pointer && seenOperationPointers.has(pointer)) continue
+
+    const opChannels = operation.channels().all()
+    if (opChannels.length === 0) {
+      const fallbackChannel = ensureChannelForOperation(
+        operation,
+        channelMap,
+        channels
+      )
+      const operationInfo = mapOperation(operation, fallbackChannel.name)
+      fallbackChannel.operations.push(operationInfo)
+      operations.push(operationInfo)
+      continue
+    }
+
+    for (const opChannel of opChannels) {
+      const channelInfo = resolveChannelInfo(opChannel, channelMap, channels)
+      const operationInfo = mapOperation(operation, channelInfo.name)
+      channelInfo.operations.push(operationInfo)
+      operations.push(operationInfo)
+    }
   }
 
   const servers = document
@@ -50,12 +72,62 @@ export function processDocument(
     .all()
     .map(mapServer)
 
+  const components = mapComponents(document)
+
   return {
     document,
     channels,
     operations,
     servers,
+    components,
   }
+}
+
+function resolveChannelInfo(
+  channel: ChannelInterface,
+  map: Map<string, ChannelInfo>,
+  list: ChannelInfo[]
+): ChannelInfo {
+  const name = channel.id() ?? channel.address() ?? channel.meta().pointer
+  const existing = map.get(name)
+  if (existing) return existing
+
+  const info: ChannelInfo = {
+    name,
+    description: channel.description() ?? undefined,
+    tags: extractTagNamesFromJson(
+      (channel.json() as { tags?: Array<{ name?: string }> }).tags
+    ),
+    operations: [],
+  }
+
+  map.set(name, info)
+  list.push(info)
+  return info
+}
+
+function ensureChannelForOperation(
+  operation: OperationInterface,
+  map: Map<string, ChannelInfo>,
+  list: ChannelInfo[]
+): ChannelInfo {
+  const fallbackName =
+    operation.operationId() ??
+    operation.id() ??
+    `operation-${map.size + 1}`
+  const existing = map.get(fallbackName)
+  if (existing) return existing
+
+  const info: ChannelInfo = {
+    name: fallbackName,
+    description: operation.summary() ?? operation.description() ?? undefined,
+    tags: undefined,
+    operations: [],
+  }
+
+  map.set(fallbackName, info)
+  list.push(info)
+  return info
 }
 
 function mapOperation(
@@ -154,6 +226,12 @@ function mapServer(server: ServerInterface): ServerInfo {
     description: server.description() ?? undefined,
     bindings: raw.bindings,
   }
+}
+
+function mapComponents(document: AsyncAPIDocument): Record<string, unknown> | undefined {
+  const components = document.components()
+  if (!components || components.isEmpty()) return undefined
+  return components.json() as Record<string, unknown>
 }
 
 function extractTagNames(tags?: TagsInterface): string[] | undefined {

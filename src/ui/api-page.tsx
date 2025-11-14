@@ -4,6 +4,7 @@ import type {
   AsyncAPIServer,
   AsyncCreatePageOptions,
   AsyncRenderContext,
+  AsyncAPIPageClientOptions,
   ChannelInfo,
   CodeSample,
   MessageInfo,
@@ -11,7 +12,12 @@ import type {
   ProcessedAsyncDocument,
   ResolvedSchema,
   Awaitable,
+  AsyncComponents,
 } from '../types'
+import { processDocument } from '../server/create/process-document'
+import type { Parser as AsyncAPIParser } from '@asyncapi/parser'
+import { WSClientProvider, WSSidebar } from '../components/ws-client'
+import type { ServerOption } from '../components/ws-client'
 import { OperationBadge } from './components/operation-badge'
 import type { ReactNode, JSX } from 'react'
 
@@ -64,7 +70,31 @@ export function createAsyncAPIPage(
       options
     )
 
-    return pageLayout
+    const clientOptions: AsyncAPIPageClientOptions = options.client ?? {}
+    if (clientOptions.enabled === false) {
+      return pageLayout
+    }
+
+    const sidebarServers = await resolveSidebarServers(
+      clientOptions,
+      processed,
+      renderCtx
+    )
+    const sidebar = await renderClientSidebar(clientOptions, sidebarServers, renderCtx)
+
+    if (!sidebar) {
+      return pageLayout
+    }
+
+    const layout = await renderClientLayout(
+      clientOptions,
+      pageLayout,
+      sidebar,
+      renderCtx,
+      sidebarServers
+    )
+
+    return renderClientProvider(clientOptions, layout, renderCtx, sidebarServers)
   }
 
   return AsyncAPIPage
@@ -82,13 +112,14 @@ async function renderPageLayout(
       children: await renderChannelBlock(block, ctx, options),
     }))
   )
+  const componentsSection = renderComponentsOverview(processed.components)
 
   if (options.content?.renderPageLayout) {
     return await options.content.renderPageLayout({ channels: channelSlots }, ctx)
   }
 
   return (
-    <div className="asyncapi-page flex flex-col gap-24 text-sm">
+    <div className="asyncapi-page flex flex-col gap-16 text-sm">
       {channelSlots.map((slot, index) => (
         <section
           key={slot.item.name ?? index}
@@ -101,9 +132,10 @@ async function renderPageLayout(
               <p className="text-base text-muted-foreground">{slot.item.description}</p>
             )}
           </div>
-          <div className="flex flex-col gap-8">{slot.children}</div>
+          <div className="flex flex-col gap-6">{slot.children}</div>
         </section>
       ))}
+      {componentsSection}
     </div>
   )
 }
@@ -119,7 +151,7 @@ async function renderChannelBlock(
     )
   )
 
-  return <div className="flex flex-col gap-8">{operations}</div>
+  return <div className="flex flex-col gap-6">{operations}</div>
 }
 
 async function renderOperationBlock(
@@ -133,7 +165,7 @@ async function renderOperationBlock(
       ? resolveNode(ctx.renderMarkdown(block.operation.description))
       : Promise.resolve(null),
   ])
-  const examplesSection = renderExamplesSection(block)
+  const examplesSection = await renderExamplesSection(block)
   const codeSamplesSection = renderCodeSamples(block)
   const bindingsSection = renderBindings(block)
   const playgroundContent =
@@ -150,11 +182,9 @@ async function renderOperationBlock(
     new Set([...(block.channel.tags ?? []), ...(block.operation.tags ?? [])])
   )
 
-  const OperationActions = await getOperationActions()
-
   const header = (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-[6px] text-[11px] uppercase tracking-wide text-muted-foreground">
         <OperationBadge direction={block.operation.direction} />
         <span className="font-mono text-xs text-muted-foreground">
           {block.channel.name}
@@ -163,18 +193,15 @@ async function renderOperationBlock(
           <TagPill key={tag} label={tag} />
         ))}
       </div>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-2">
-          <h3 className="text-xl font-semibold leading-tight">
-            {getOperationTitle(block.operation)}
-          </h3>
-          {descriptionNode && (
-            <div className="prose prose-sm text-muted-foreground">
-              {descriptionNode}
-            </div>
-          )}
-        </div>
-        <OperationActions operation={block.operation} message={block.message} />
+      <div className="min-w-0 space-y-1">
+        <h3 className="text-xl font-semibold leading-tight">
+          {getOperationTitle(block.operation)}
+        </h3>
+        {descriptionNode && (
+          <div className="prose prose-sm text-muted-foreground">
+            {descriptionNode}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -194,19 +221,7 @@ async function renderOperationBlock(
     )
   }
 
-  const leftColumn = (
-    <div className="min-w-0 flex-1 space-y-4">{leftSections}</div>
-  )
-
-  const columns =
-    secondarySections.length > 0 ? (
-      <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:gap-8">
-        {leftColumn}
-        <div className="min-w-0 space-y-4 xl:w-80">{secondarySections}</div>
-      </div>
-    ) : (
-      leftColumn
-    )
+  const sections = [...leftSections, ...secondarySections]
 
   if (options.content?.renderOperationLayout) {
     return await options.content.renderOperationLayout(
@@ -226,7 +241,7 @@ async function renderOperationBlock(
   return (
     <article className="asyncapi-operation space-y-6 rounded-2xl border border-border/60 bg-card/50 p-5 text-sm shadow-sm">
       {header}
-      {columns}
+      <div className="flex flex-col gap-4">{sections}</div>
     </article>
   )
 }
@@ -298,38 +313,173 @@ async function resolveDocument(
   server: AsyncAPIServer,
   documentInput: AsyncAPIPageProps['document']
 ): Promise<ProcessedAsyncDocument> {
-  if (typeof documentInput === 'string') {
-    const schemas = await server.getSchemas()
-    const resolved = schemas[documentInput]
-    if (!resolved) {
-      throw new Error(`AsyncAPI document "${documentInput}" not found.`)
-    }
-    return resolved
-  }
-
   if (documentInput instanceof Promise) {
     return resolveDocument(server, await documentInput)
   }
 
-  if (
-    typeof documentInput === 'object' &&
-    documentInput !== null &&
-    Array.isArray((documentInput as ProcessedAsyncDocument).operations)
-  ) {
-    return documentInput as ProcessedAsyncDocument
-  }
+  if (typeof documentInput === 'string') {
+    const serverResult = await tryResolveServerDocument(server, documentInput)
+    if (serverResult?.resolved) {
+      return serverResult.resolved
+    }
 
-  if (
-    typeof documentInput === 'object' &&
-    documentInput !== null &&
-    'allChannels' in (documentInput as AsyncAPIDocument)
-  ) {
+    const inlineSource = await tryLoadInlineSource(documentInput)
+    if (inlineSource) {
+      return parseAsyncAPISource(inlineSource.source, inlineSource.sourceName)
+    }
+
+    if (serverResult) {
+      const available = serverResult.availableKeys.length
+        ? `Available keys: ${serverResult.availableKeys.join(', ')}`
+        : 'No AsyncAPI schemas are currently loaded.'
+      throw new Error(`AsyncAPI document "${documentInput}" not found. ${available}`)
+    }
+
     throw new Error(
-      'AsyncAPIPage cannot process raw AsyncAPI documents on the client. Preprocess the document on the server (e.g. via createAsyncAPI) and pass the resulting schema instead.'
+      `Unable to resolve AsyncAPI document from string input. Provide a registered key or inline AsyncAPI schema content.`
     )
   }
 
-  throw new Error('Invalid AsyncAPI document provided to <AsyncAPIPage />.')
+  if (isProcessedDocument(documentInput)) {
+    return documentInput
+  }
+
+  if (isAsyncAPIDocumentLike(documentInput)) {
+    return processDocument(documentInput)
+  }
+
+  throw new Error('Unsupported AsyncAPI document type. Pass a key, schema string, AsyncAPIDocument, or processed document.')
+}
+
+interface ServerResolutionResult {
+  resolved?: ProcessedAsyncDocument
+  availableKeys: string[]
+}
+
+async function tryResolveServerDocument(
+  server: AsyncAPIServer,
+  key: string
+): Promise<ServerResolutionResult | undefined> {
+  if (!server || typeof server.getSchemas !== 'function') return undefined
+  try {
+    const schemas = await server.getSchemas()
+    return {
+      resolved: schemas[key],
+      availableKeys: Object.keys(schemas),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+interface InlineSourceResult {
+  source: string
+  sourceName: string
+}
+
+async function tryLoadInlineSource(value: string): Promise<InlineSourceResult | undefined> {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+
+  if (looksLikeInlineSpec(trimmed)) {
+    return { source: value, sourceName: 'inline-asyncapi' }
+  }
+
+  if (isLikelyUrl(trimmed) && typeof fetch === 'function') {
+    const response = await fetch(trimmed)
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch AsyncAPI document from "${trimmed}": ${response.status} ${response.statusText}`
+      )
+    }
+    return { source: await response.text(), sourceName: trimmed }
+  }
+
+  return undefined
+}
+
+const PARSER_CONFIGURATION = {
+  ruleset: {
+    core: false,
+    recommended: false,
+    extends: [],
+  },
+} as const
+
+let browserParserCtorPromise: Promise<typeof AsyncAPIParser> | null = null
+
+async function getBrowserParserCtor(): Promise<typeof AsyncAPIParser> {
+  if (!browserParserCtorPromise) {
+    browserParserCtorPromise = import('@asyncapi/parser/browser').then((mod) => {
+      const ctor = (mod as { default?: typeof AsyncAPIParser }).default ??
+        (mod as { Parser?: typeof AsyncAPIParser }).Parser
+      if (!ctor) {
+        throw new Error('AsyncAPI parser (browser) bundle did not expose a constructor.')
+      }
+      return ctor
+    })
+  }
+  return browserParserCtorPromise
+}
+
+async function parseAsyncAPISource(
+  source: string,
+  sourceName: string
+): Promise<ProcessedAsyncDocument> {
+  const ParserCtor = await getBrowserParserCtor()
+  const parser = new ParserCtor(PARSER_CONFIGURATION)
+  const { document, diagnostics } = await parser.parse(source, {
+    source: sourceName,
+    applyTraits: true,
+  })
+
+  const criticalDiagnostics = (diagnostics ?? []).filter((diag) => diag.severity === 0)
+  if (criticalDiagnostics.length > 0) {
+    const formatted = formatDiagnostics(criticalDiagnostics)
+    throw new Error(`Failed to parse AsyncAPI document "${sourceName}":\n${formatted}`)
+  }
+
+  if (!document) {
+    throw new Error(`AsyncAPI parser did not return a document for "${sourceName}".`)
+  }
+
+  return processDocument(document)
+}
+
+function formatDiagnostics(
+  diagnostics: Array<{ message: string; path?: Array<string | number> }>
+): string {
+  return diagnostics
+    .map((diag) => {
+      const path = diag.path?.length ? diag.path.map(String).join('.') : undefined
+      return `${diag.message}${path ? ` at ${path}` : ''}`
+    })
+    .join('\n')
+}
+
+function isProcessedDocument(value: unknown): value is ProcessedAsyncDocument {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as ProcessedAsyncDocument).operations)
+  )
+}
+
+function isAsyncAPIDocumentLike(value: unknown): value is AsyncAPIDocument {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as AsyncAPIDocument).allChannels === 'function'
+  )
+}
+
+function looksLikeInlineSpec(value: string): boolean {
+  if (!value) return false
+  return value.startsWith('{') || value.startsWith('asyncapi:') || value.includes('\n')
+}
+
+function isLikelyUrl(value: string): boolean {
+  return value.startsWith('http://') || value.startsWith('https://')
 }
 
 function createRenderContext(processed: ProcessedAsyncDocument): AsyncRenderContext {
@@ -374,10 +524,16 @@ async function renderSchemaSection(
 
   const schemaContent = block.message.schema ?? block.message.payload
   let schemaNode: ReactNode | null = null
+  const schemaEntries =
+    schemaContent && typeof schemaContent === 'object'
+      ? buildSchemaEntries(schemaContent)
+      : []
 
   if (options.schemaUI?.render && schemaContent) {
     const resolvedSchema: ResolvedSchema = { schema: schemaContent }
     schemaNode = await options.schemaUI.render({ root: resolvedSchema }, ctx)
+  } else if (schemaEntries.length > 0) {
+    schemaNode = <SchemaFields entries={schemaEntries} />
   } else if (schemaContent) {
     schemaNode = (
       <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
@@ -416,17 +572,21 @@ async function renderSchemaSection(
   )
 }
 
-function renderExamplesSection(block: OperationBlock) {
+async function renderExamplesSection(block: OperationBlock) {
   if (!block.message?.examples?.length) return null
 
+  const OperationActions = await getOperationActions()
+
   return (
-    <SectionCard title="Examples">
-      <div className="flex flex-col gap-3">
+    <SectionCard
+      title="Examples"
+      titleSuffix={
+        <OperationActions operation={block.operation} message={block.message} className="w-auto" />
+      }
+    >
+      <div className="flex flex-col gap-4">
         {block.message.examples.map((example, index) => (
-          <pre
-            key={index}
-            className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs"
-          >
+          <pre key={index} className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
             {formatJSON(example)}
           </pre>
         ))}
@@ -468,6 +628,228 @@ function renderBindings(block: OperationBlock) {
   )
 }
 
+function renderComponentsOverview(components?: AsyncComponents) {
+  if (!components) return null
+  const entries = Object.entries(components).filter(([, value]) => hasComponentEntries(value))
+  if (entries.length === 0) return null
+
+  return (
+    <section className="asyncapi-components flex flex-col gap-6" id="asyncapi-components">
+      <div className="space-y-2">
+        <h2 className="text-2xl font-semibold">Components</h2>
+        <p className="text-base text-muted-foreground">
+          Reusable schemas, messages, bindings, and traits shared across channels.
+        </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {entries.map(([group, value]) => (
+          <SectionCard key={group} title={formatComponentTitle(group)}>
+            <ComponentEntries value={value} />
+          </SectionCard>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function SchemaFields({ entries }: { entries: SchemaFieldEntry[] }) {
+  return (
+    <div className="space-y-3">
+      {entries.map((entry) => (
+        <div
+          key={entry.path}
+          className="rounded-lg border border-border/70 bg-background/70 p-3 text-sm shadow-sm"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1 font-mono text-sm font-semibold">
+              <span>{entry.label}</span>
+              {!entry.required && <span className="text-xs text-muted-foreground">?</span>}
+            </div>
+            <span className="text-xs text-muted-foreground">{entry.type}</span>
+          </div>
+          {entry.description && (
+            <p className="mt-1 text-sm text-muted-foreground">{entry.description}</p>
+          )}
+          {entry.children && entry.children.length > 0 && (
+            <div className="mt-3 space-y-3 border-l border-border/60 pl-3">
+              <SchemaFields entries={entry.children} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ComponentEntries({ value }: { value: unknown }) {
+  if (!value || typeof value !== 'object') {
+    return (
+      <pre className="overflow-auto rounded bg-muted/70 p-3 font-mono text-xs">
+        {formatJSON(value)}
+      </pre>
+    )
+  }
+
+  const record = value as Record<string, unknown>
+  const entries = Object.entries(record)
+  if (entries.length === 0) {
+    return <p className="text-sm text-muted-foreground">No entries defined.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {entries.map(([name, definition]) => (
+        <div key={name} className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {name}
+          </p>
+          <pre className="overflow-auto rounded bg-muted/70 p-3 font-mono text-xs">
+            {formatJSON(definition)}
+          </pre>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function hasComponentEntries(value: unknown): boolean {
+  if (value === null || value === undefined) return false
+  if (typeof value !== 'object') return true
+  return Object.keys(value as Record<string, unknown>).length > 0
+}
+
+function formatComponentTitle(key: string): string {
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!spaced) return 'Component'
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+interface SchemaFieldEntry {
+  label: string
+  type: string
+  description?: string
+  required?: boolean
+  children?: SchemaFieldEntry[]
+  path: string
+}
+
+function buildSchemaEntries(schema: unknown, path = 'payload'): SchemaFieldEntry[] {
+  if (!isSchemaObject(schema)) {
+    return []
+  }
+
+  const schemaObject = normalizeSchema(schema)
+
+  if (schemaObject.properties && typeof schemaObject.properties === 'object') {
+    const required = Array.isArray(schemaObject.required) ? schemaObject.required : []
+    return Object.entries(schemaObject.properties).map(([name, definition]) => {
+      const defObject = normalizeSchema(definition)
+      const entryPath = `${path}.${name}`
+      return {
+        label: name,
+        type: describeSchemaType(defObject),
+        description: getSchemaDescription(defObject),
+        required: required.includes(name),
+        children: collectChildEntries(defObject, entryPath),
+        path: entryPath,
+      }
+    })
+  }
+
+  if (isArraySchema(schemaObject)) {
+    const child = normalizeSchema(schemaObject.items)
+    const entryPath = `${path}[]`
+    const label = typeof schemaObject.title === 'string' ? schemaObject.title : path
+    return [
+      {
+        label,
+        type: `${describeSchemaType(child)}[]`,
+        description: getSchemaDescription(schemaObject),
+        required: true,
+        children: collectChildEntries(child, entryPath),
+        path: entryPath,
+      },
+    ]
+  }
+
+  if (path === 'payload') {
+    const label = typeof schemaObject.title === 'string' ? schemaObject.title : path
+    return [
+      {
+        label,
+        type: describeSchemaType(schemaObject),
+        description: getSchemaDescription(schemaObject),
+        required: true,
+        path,
+      },
+    ]
+  }
+
+  return []
+}
+
+function collectChildEntries(schema: Record<string, unknown>, path: string): SchemaFieldEntry[] | undefined {
+  if (schema.properties || schema.type === 'object') {
+    const entries = buildSchemaEntries(schema, path)
+    return entries.length > 0 ? entries : undefined
+  }
+
+  if (isArraySchema(schema)) {
+    const child = normalizeSchema(schema.items)
+    const entries = buildSchemaEntries(child, `${path}[]`)
+    return entries.length > 0 ? entries : undefined
+  }
+
+  return undefined
+}
+
+function normalizeSchema(value: unknown): Record<string, unknown> {
+  return (value ?? {}) as Record<string, unknown>
+}
+
+function isArraySchema(schema: Record<string, unknown>): schema is Record<string, unknown> & { items?: unknown } {
+  return schema.type === 'array' && typeof schema.items !== 'undefined'
+}
+
+function isSchemaObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function describeSchemaType(schema: Record<string, unknown>): string {
+  const type = schema.type
+  if (type === 'array') {
+    const inner = normalizeSchema(schema.items)
+    return `${describeSchemaType(inner)}[]`
+  }
+
+  if (type === 'object' || schema.properties) {
+    return 'object'
+  }
+
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    return schema.enum.map((value) => JSON.stringify(value)).join(' | ')
+  }
+
+  if (Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
+    return schema.anyOf
+      .map((sub) => describeSchemaType(normalizeSchema(sub)))
+      .join(' | ')
+  }
+
+  if (typeof type === 'string') return type
+  return 'value'
+}
+
+function getSchemaDescription(schema: Record<string, unknown>): string | undefined {
+  if (typeof schema.description === 'string') return schema.description
+  if (typeof schema.summary === 'string') return schema.summary
+  return undefined
+}
+
 function getOperationTitle(operation: OperationInfo) {
   if (operation.summary) return operation.summary
   if (operation.operationId) return operation.operationId
@@ -499,9 +881,10 @@ interface SectionCardProps {
   title: string
   children?: ReactNode
   className?: string
+  titleSuffix?: ReactNode
 }
 
-function SectionCard({ title, children, className }: SectionCardProps) {
+function SectionCard({ title, children, className, titleSuffix }: SectionCardProps) {
   if (isEmptyNode(children)) return null
 
   return (
@@ -511,9 +894,12 @@ function SectionCard({ title, children, className }: SectionCardProps) {
         className
       )}
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </p>
+        {titleSuffix}
+      </div>
       <div className="mt-3 text-sm text-foreground">{children}</div>
     </section>
   )
@@ -529,4 +915,88 @@ function isEmptyNode(node: ReactNode | null | undefined): boolean {
 
 function cn(...classes: Array<string | undefined | null | false>) {
   return classes.filter(Boolean).join(' ')
+}
+
+async function resolveSidebarServers(
+  clientOptions: AsyncAPIPageClientOptions,
+  processed: ProcessedAsyncDocument,
+  ctx: AsyncRenderContext
+): Promise<ServerOption[]> {
+  if (Array.isArray(clientOptions.servers)) {
+    return clientOptions.servers
+  }
+
+  if (typeof clientOptions.servers === 'function') {
+    const result = await clientOptions.servers({ document: processed })
+    return Array.isArray(result) ? result : []
+  }
+
+  return mapDocumentServers(processed, ctx)
+}
+
+function mapDocumentServers(
+  processed: ProcessedAsyncDocument,
+  ctx: AsyncRenderContext
+): ServerOption[] {
+  if (!processed.servers?.length) return []
+
+  return processed.servers
+    .map((server) => {
+      const url = server.url ?? ctx.getServerUrl(server.name)
+      if (!url) return null
+      return {
+        name: server.name ?? server.url ?? server.protocol ?? 'Server',
+        url,
+      }
+    })
+    .filter((server): server is ServerOption => server !== null)
+}
+
+async function renderClientSidebar(
+  clientOptions: AsyncAPIPageClientOptions,
+  servers: ServerOption[],
+  ctx: AsyncRenderContext
+): Promise<ReactNode | null> {
+  if (clientOptions.renderSidebar) {
+    const custom = await clientOptions.renderSidebar({ servers, ctx })
+    if (custom !== undefined) {
+      return custom
+    }
+  }
+
+  return <WSSidebar title={clientOptions.title ?? 'WebSocket Client'} servers={servers} />
+}
+
+async function renderClientLayout(
+  clientOptions: AsyncAPIPageClientOptions,
+  content: ReactNode,
+  sidebar: ReactNode,
+  ctx: AsyncRenderContext,
+  servers: ServerOption[]
+): Promise<ReactNode> {
+  if (clientOptions.renderLayout) {
+    return clientOptions.renderLayout({ content, sidebar, ctx, servers })
+  }
+
+  return (
+    <div className="asyncapi-shell flex flex-col gap-8 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-10">
+      <div className="asyncapi-shell-content min-w-0 flex-1">{content}</div>
+      <aside className="asyncapi-shell-sidebar w-full xl:max-w-sm xl:justify-self-end xl:self-stretch">
+        <div className="h-full">{sidebar}</div>
+      </aside>
+    </div>
+  )
+}
+
+async function renderClientProvider(
+  clientOptions: AsyncAPIPageClientOptions,
+  children: ReactNode,
+  ctx: AsyncRenderContext,
+  servers: ServerOption[]
+): Promise<ReactNode> {
+  if (clientOptions.renderProvider) {
+    return clientOptions.renderProvider({ children, ctx, servers })
+  }
+
+  return <WSClientProvider>{children}</WSClientProvider>
 }

@@ -1,24 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Fumadocs AsyncAPI preset styles */
-.asyncapi-page {
-  /* Base styles for AsyncAPI documentation */
-}
-
-.asyncapi-channel {
-  /* Channel-specific styles */
-}
-
-.asyncapi-operation {
-  /* Operation-specific styles */
-}
-
-.asyncapi-message {
-  /* Message-specific styles */
-}
-
-.asyncapi-playground {
-  /* Playground-specific styles */
-}
+/**
+ * Fumadocs AsyncAPI Tailwind preset.
+ *
+ * Import this file from your Tailwind CSS entry (e.g. `app/globals.css`) to
+ * register the AsyncAPI component sources without injecting another copy of
+ * Tailwind's base styles into your site.
+ */
+@source '../**/*.js';

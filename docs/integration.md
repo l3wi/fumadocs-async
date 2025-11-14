@@ -66,38 +66,45 @@ The plugin injects direction badges (Publish/Subscribe) into the tree.
 
 ## 4. Client UI + WebSocket sidebar
 
+`createAsyncAPIPage` now embeds the `WSClientProvider` and sidebar **per page**, so the WebSocket client only appears where the AsyncAPI reference is rendered.
+
 ```ts
 // components/asyncapi-page.tsx
 import { asyncapi } from '@/lib/asyncapi'
 import { createAsyncAPIPage } from 'fumadocs-asyncapi'
 
 export const AsyncAPIPage = createAsyncAPIPage(asyncapi, {
-  generateCodeSamples: async op => [],
+  generateCodeSamples: async (op) => [],
+  client: {
+    title: 'WebSocket Client',
+    servers: async ({ document }) =>
+      document.servers.map((server) => ({
+        name: server.name,
+        url: server.url,
+      })),
+  },
 })
 ```
 
-Wrap your app layout with the WebSocket provider and mount the sidebar:
+Use the `client` options to customise the WebSocket UI:
 
-```tsx
-import { WSClientProvider, WSSidebar } from 'fumadocs-asyncapi'
-
-export default function RootLayout({ children }) {
-  return (
-    <WSClientProvider>
-      <div className="flex">
-        <main className="flex-1">{children}</main>
-        <aside className="w-80">
-          <WSSidebar servers={[{ name: 'Prod', url: 'wss://api.example.com' }]} />
-        </aside>
-      </div>
-    </WSClientProvider>
-  )
-}
-```
+- `enabled` – disable the sidebar entirely.
+- `servers` – provide a list or async factory for server targets.
+- `renderSidebar`, `renderLayout`, `renderProvider` – override any part of the default UI while keeping it scoped to the AsyncAPI page.
 
 Operations rendered by `<AsyncAPIPage />` automatically expose “Load into WebSocket client” buttons that push example payloads to the sidebar.
 
-## 5. Optional hooks
+## 5. Tailwind preset (no global CSS overrides)
+
+Import the preset from your Tailwind entry so the host build can discover the component classes without pulling in another copy of Tailwind’s base styles:
+
+```css
+@import 'fumadocs-asyncapi/css/preset.css';
+```
+
+This file only registers the AsyncAPI sources via `@source`—it does not ship any resets or utilities, keeping your docs site’s CSS untouched.
+
+## 6. Optional hooks
 
 - `generateTypeScriptSchema` to emit TypeScript definitions alongside schemas.
 - `schemaUI.render` for custom JSON schema components.

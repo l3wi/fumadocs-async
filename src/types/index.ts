@@ -1,6 +1,7 @@
 // Core types for fumadocs-asyncapi
 import type { AsyncAPIDocumentInterface } from '@asyncapi/parser'
 import type { ReactNode } from 'react'
+import type { ServerOption } from '../components/ws-client/types'
 
 // Re-export the parser's document type
 export type AsyncAPIDocument = AsyncAPIDocumentInterface
@@ -27,6 +28,7 @@ export interface ProcessedAsyncDocument {
   channels: ChannelInfo[]
   operations: OperationInfo[]
   servers: ServerInfo[]
+  components?: AsyncComponents
 }
 
 export interface ChannelInfo {
@@ -65,6 +67,8 @@ export interface ServerInfo {
   description?: string
   bindings?: Record<string, unknown>
 }
+
+export type AsyncComponents = Record<string, unknown>
 
 // File generation types
 export interface AsyncPageContext {
@@ -210,7 +214,48 @@ export interface AsyncCreatePageOptions {
 }
 
 export interface AsyncAPIPageClientOptions {
-  // Client-side configuration options
+  /**
+   * Enable or disable the built-in WebSocket client wrapper.
+   *
+   * @defaultValue true
+   */
+  enabled?: boolean
+  /**
+   * Optional title passed to the default `<WSSidebar />` component.
+   */
+  title?: string
+  /**
+   * Provide the list of WebSocket servers for the sidebar. Defaults to
+   * the AsyncAPI document servers.
+   */
+  servers?:
+    | ServerOption[]
+    | ((ctx: { document: ProcessedAsyncDocument }) => Awaitable<ServerOption[]>)
+  /**
+   * Customise the sidebar body. Return `undefined` to fall back to the default
+   * `<WSSidebar />`, or `null` to omit the sidebar entirely.
+   */
+  renderSidebar?: (props: {
+    servers: ServerOption[]
+    ctx: AsyncRenderContext
+  }) => Awaitable<ReactNode | null | undefined>
+  /**
+   * Customise how the sidebar and content are laid out.
+   */
+  renderLayout?: (props: {
+    content: ReactNode
+    sidebar: ReactNode | null
+    ctx: AsyncRenderContext
+    servers: ServerOption[]
+  }) => Awaitable<ReactNode>
+  /**
+   * Override the provider wrapper. Defaults to `<WSClientProvider />`.
+   */
+  renderProvider?: (props: {
+    children: ReactNode
+    ctx: AsyncRenderContext
+    servers: ServerOption[]
+  }) => Awaitable<ReactNode>
 }
 
 export interface CodeSample {
