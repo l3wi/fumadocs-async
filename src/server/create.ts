@@ -1,8 +1,10 @@
-import { Parser } from '@asyncapi/parser'
+import type { Parser as AsyncAPIParser } from '@asyncapi/parser'
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 import type {
   AsyncAPIDocument,
   AsyncAPIOptions,
@@ -11,7 +13,15 @@ import type {
 } from '../types'
 import { processDocument } from './create/process-document'
 
-const parser = new Parser()
+const ParserCtor = resolveParser()
+
+const parser = new ParserCtor({
+  ruleset: {
+    core: false,
+    recommended: false,
+    extends: [],
+  },
+})
 
 type InputResolver =
   | {
@@ -129,10 +139,11 @@ async function resolveInputEntries(
 
   for (const [key, value] of Object.entries(record)) {
     if (typeof value === 'string') {
+      const sourceValue = await resolveStringInput(value)
       entries.push({
         key,
-        source: value,
-        fingerprint: fingerprint(value),
+        source: sourceValue,
+        fingerprint: fingerprint(sourceValue),
       })
     } else if (value) {
       const json = value.json()
@@ -194,5 +205,69 @@ function isUrl(value: string): boolean {
     return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'file:'
   } catch {
     return false
+  }
+}
+
+async function resolveStringInput(value: string): Promise<string> {
+  const target = resolveStringTarget(value)
+  if (target) {
+    const loaded = await loadExternalSource(target)
+    return loaded.source
+  }
+  return value
+}
+
+function resolveStringTarget(value: string): string | undefined {
+  if (isUrl(value)) {
+    return value
+  }
+
+  const absolute = path.isAbsolute(value)
+    ? value
+    : path.resolve(process.cwd(), value)
+
+  if (existsSync(absolute)) {
+    return absolute
+  }
+
+  return undefined
+}
+
+function resolveParser(): typeof AsyncAPIParser {
+  const candidateFiles = [
+    safePackageJsonPath(process.cwd()),
+    safeModulePackageJson(),
+  ].filter(Boolean) as string[]
+
+  for (const pkgPath of candidateFiles) {
+    try {
+      const localRequire = createRequire(pkgPath)
+      const mod = localRequire('@asyncapi/parser') as { Parser: typeof AsyncAPIParser }
+      if (mod?.Parser) {
+        return mod.Parser
+      }
+    } catch {
+      // fall through to the next candidate
+    }
+  }
+
+  throw new Error(
+    'fumadocs-asyncapi: unable to load @asyncapi/parser. Make sure it is installed in your application.'
+  )
+}
+
+function safePackageJsonPath(dir: string): string | undefined {
+  const pkgPath = path.join(dir, 'package.json')
+  if (existsSync(pkgPath)) {
+    return pkgPath
+  }
+  return undefined
+}
+
+function safeModulePackageJson(): string | undefined {
+  try {
+    return fileURLToPath(new URL('../../package.json', import.meta.url))
+  } catch {
+    return undefined
   }
 }

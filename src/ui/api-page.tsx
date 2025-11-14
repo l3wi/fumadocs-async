@@ -12,10 +12,19 @@ import type {
   ResolvedSchema,
   Awaitable,
 } from '../types'
-import { processDocument } from '../server/create/process-document'
 import { OperationBadge } from './components/operation-badge'
-import { OperationActions } from './components/operation-actions.client'
 import type { ReactNode, JSX } from 'react'
+
+type OperationActionsComponent = typeof import('./components/operation-actions.client').OperationActions
+
+let cachedOperationActions: OperationActionsComponent | null = null
+
+async function getOperationActions(): Promise<OperationActionsComponent> {
+  if (!cachedOperationActions) {
+    cachedOperationActions = (await import('./components/operation-actions.client')).OperationActions
+  }
+  return cachedOperationActions
+}
 
 interface OperationBlock {
   channel: ChannelInfo
@@ -140,6 +149,8 @@ async function renderOperationBlock(
   const tags = Array.from(
     new Set([...(block.channel.tags ?? []), ...(block.operation.tags ?? [])])
   )
+
+  const OperationActions = await getOperationActions()
 
   const header = (
     <div className="space-y-4">
@@ -313,7 +324,9 @@ async function resolveDocument(
     documentInput !== null &&
     'allChannels' in (documentInput as AsyncAPIDocument)
   ) {
-    return processDocument(documentInput as unknown as AsyncAPIDocument)
+    throw new Error(
+      'AsyncAPIPage cannot process raw AsyncAPI documents on the client. Preprocess the document on the server (e.g. via createAsyncAPI) and pass the resulting schema instead.'
+    )
   }
 
   throw new Error('Invalid AsyncAPI document provided to <AsyncAPIPage />.')
