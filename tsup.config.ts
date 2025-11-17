@@ -58,6 +58,25 @@ export default defineConfig([
     sourcemap: true,
     minify: false,
   },
+  // Next-specific helpers
+  {
+    entry: {
+      'next/index': 'src/next/index.ts',
+    },
+    format: ['esm'],
+    dts: true,
+    clean: false,
+    external: [
+      'react',
+      'react-dom',
+      'next',
+      '@asyncapi/parser',
+      'fumadocs-core',
+    ],
+    splitting: true,
+    sourcemap: true,
+    minify: false,
+  },
   // Client-only widgets (WebSocket UI, hooks, etc.)
   {
     entry: {

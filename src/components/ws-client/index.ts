@@ -1,3 +1,6 @@
 export { WSClientProvider, useWSClient, useOptionalWSClient } from './provider'
 export { WSSidebar } from './sidebar'
+export { default as WSPlayground } from './playground'
 export type { ServerOption, WSMessageEntry } from './types'
+export type { WSPlaygroundProps, WSPlaygroundState } from './playground'
+export type { WSFetcher, WSConnectionOptions, WSSendOptions, WSMessage, WSConnectionState } from './fetcher'

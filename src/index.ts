@@ -18,3 +18,23 @@ export type {
   AsyncRenderContext,
   Awaitable,
 } from './types'
+
+// WebSocket client exports
+export { 
+  WSClientProvider, 
+  WSPlayground, 
+  WSSidebar, 
+  useWSClient, 
+  useOptionalWSClient 
+} from './components/ws-client'
+export type { 
+  WSPlaygroundProps,
+  WSPlaygroundState,
+  WSFetcher,
+  WSConnectionOptions,
+  WSSendOptions,
+  WSMessage,
+  WSConnectionState,
+  ServerOption,
+  WSMessageEntry 
+} from './components/ws-client'

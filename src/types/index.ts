@@ -233,6 +233,11 @@ export interface AsyncCreatePageOptions {
     }) => ReactNode | Promise<ReactNode>
   }
 
+  /**
+   * Provide custom links for channel references rendered in headers.
+   */
+  channelHref?: (channel: ChannelInfo, operation?: OperationInfo) => string | undefined
+
   client?: AsyncAPIPageClientOptions
 }
 

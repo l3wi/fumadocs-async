@@ -7,3 +7,4 @@ export {
   useOptionalWSClient,
 } from './components/ws-client'
 export type { ServerOption, WSMessageEntry } from './components/ws-client'
+export { MessageDefinitionPanel } from './ui/components/message-definition.client'

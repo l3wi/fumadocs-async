@@ -35,21 +35,17 @@ export async function AsyncAPIChannelsPage({
 
   return (
     <div className="space-y-12">
-      {channels.map((channel) => (
+      {channels.map(channel => (
         <div
           key={channel.name}
           id={getChannelAnchorId(channel.name)}
           className="space-y-4 rounded-2xl border border-border/60 bg-card/50 p-6"
         >
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-semibold">
-                {renderChannelLink(channel, channelHref)}
-              </h2>
-              {channel.tags?.map((tag) => (
-                <TagBadge key={tag} tag={tag} builder={tagHref} />
-              ))}
-            </div>
+            <div className="text-2xl font-semibold">{renderChannelLink(channel, channelHref)}</div>
+            {channel.tags?.map(tag => (
+              <TagBadge key={tag} tag={tag} builder={tagHref} />
+            ))}
             {channel.description && (
               <p className="text-base text-muted-foreground">{channel.description}</p>
             )}
@@ -64,45 +60,17 @@ export async function AsyncAPIChannelsPage({
                 No operations are explicitly attached to this channel.
               </p>
             ) : (
-              <ul className="space-y-4">
-                {channel.operations.map((operation) => (
-                  <li key={operation.operationId ?? operation.id ?? operation.summary}>
-                    <div className="space-y-3 rounded-xl border border-border/60 bg-background/50 p-4">
-                      <div className="space-y-1">
-                        {operation.direction === 'publish' && (
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                              Publish
-                            </span>
-                          </div>
-                        )}
-                        {renderOperationLink(operation, operationHref)}
-                        {operation.description && (
-                          <p className="text-sm text-muted-foreground">{operation.description}</p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold uppercase tracking-wide">Channel:</span>
-                          <ChannelTag channelName={channel.name} href={`#${getChannelAnchorId(channel.name)}`} />
-                        </div>
-                        {operation.tags && operation.tags.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold uppercase tracking-wide">
-                              {operation.tags.length > 1 ? 'Tags:' : 'Tag:'}
-                            </span>
-                            <div className="flex flex-wrap gap-2">
-                              {operation.tags.map((tag) => (
-                                <TagBadge key={tag} tag={tag} builder={tagHref} />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </li>
+              <div className="space-y-4">
+                {channel.operations.map(operation => (
+                  <OperationListCard
+                    key={operation.operationId ?? operation.id ?? operation.summary}
+                    operation={operation}
+                    channel={channel}
+                    tagHref={tagHref}
+                    href={operationHref?.(operation)}
+                  />
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </div>
@@ -111,7 +79,10 @@ export async function AsyncAPIChannelsPage({
   )
 }
 
-function renderChannelLink(channel: ChannelInfo, builder?: (channel: ChannelInfo) => string | undefined) {
+function renderChannelLink(
+  channel: ChannelInfo,
+  builder?: (channel: ChannelInfo) => string | undefined
+) {
   const href = builder?.(channel)
   if (!href) return channel.name
   return (
@@ -121,15 +92,70 @@ function renderChannelLink(channel: ChannelInfo, builder?: (channel: ChannelInfo
   )
 }
 
-function renderOperationLink(operation: OperationInfo, builder?: (operation: OperationInfo) => string | undefined) {
+function OperationListCard({
+  operation,
+  channel,
+  tagHref,
+  href,
+}: {
+  operation: OperationInfo
+  channel: ChannelInfo
+  tagHref?: (tag: string) => string | undefined
+  href?: string
+}) {
   const label = operation.summary || operation.operationId || operation.id || 'Operation'
-  const href = builder?.(operation)
+  const card = (
+    <div className="space-y-3 rounded-xl border border-border/60 bg-background/50 p-4 transition hover:border-border">
+      <div className="space-y-1">
+        {operation.direction === 'publish' && (
+          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              Publish
+            </span>
+          </div>
+        )}
+        <p className="text-base font-semibold text-foreground">{label}</p>
+        {operation.description && (
+          <p className="text-sm text-muted-foreground">{operation.description}</p>
+        )}
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Address:
+          <code className="ml-2 font-mono text-sm text-foreground">
+            {operation.channel ?? channel.name}
+          </code>
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold uppercase tracking-wide">Channel:</span>
+          <ChannelTag channelName={channel.name} href={`#${getChannelAnchorId(channel.name)}`} />
+        </div>
+        {operation.tags && operation.tags.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="font-semibold uppercase tracking-wide">
+              {operation.tags.length > 1 ? 'Tags:' : 'Tag:'}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {operation.tags.map(tag => (
+                <TagBadge key={tag} tag={tag} builder={tagHref} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
   if (!href) {
-    return <p className="text-base font-semibold">{label}</p>
+    return card
   }
+
   return (
-    <a href={href} className="text-base font-semibold text-primary hover:underline">
-      {label}
+    <a
+      href={href}
+      className="block rounded-xl no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 hover:no-underline"
+    >
+      {card}
     </a>
   )
 }

@@ -1,5 +1,14 @@
 import type { ChannelInfo } from '../types'
 
+type OperationAnchorInput = {
+  operationId?: string | null
+  id?: string | null
+  summary?: string | null
+  title?: string | null
+  channel?: string | null
+  channelName?: string | null
+}
+
 export function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -20,4 +29,18 @@ export function buildChannelHref(
   const anchor = getChannelAnchorId(channel.name)
   const normalized = basePath.replace(/\/$/, '')
   return `${normalized}#${anchor}`
+}
+
+export function getOperationAnchorId(operation: OperationAnchorInput): string {
+  const base =
+    operation.operationId ||
+    operation.id ||
+    operation.summary ||
+    operation.title ||
+    operation.channel ||
+    operation.channelName ||
+    'operation'
+
+  const slug = slugify(base)
+  return slug ? `operation-${slug}` : 'operation'
 }

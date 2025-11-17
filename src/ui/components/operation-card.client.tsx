@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import type { OperationCardRenderData } from './operation-card.types'
-import { MessageDefinitionPanel } from './message-definition.client'
+import type { OperationTabData } from './operation-card.types'
 import { ChannelTag } from './channel-tag'
 
 interface OperationCardProps {
@@ -10,19 +9,16 @@ interface OperationCardProps {
 }
 
 export function OperationCard({ operation }: OperationCardProps) {
-  const [activeIndex, setActiveIndex] = useState(0)
   const tabs = operation.tabs
-  useEffect(() => {
-    if (activeIndex >= tabs.length) {
-      setActiveIndex(0)
-    }
-  }, [activeIndex, tabs.length])
 
   if (!tabs.length) {
     return null
   }
 
-  const activeTab = tabs[activeIndex] ?? tabs[0]
+  // Group tabs by type
+  const messages = tabs.filter(tab => tab.type === 'message')
+  const replies = tabs.filter(tab => tab.type === 'reply')
+  
   const filteredTags = operation.tags.filter((tag) => {
     const normalized = tag.toLowerCase()
     return normalized !== 'subscribe' && normalized !== 'publish'
@@ -64,38 +60,116 @@ export function OperationCard({ operation }: OperationCardProps) {
         </div>
       </header>
 
-      <div className="space-y-4">
-        <div className="flex flex-wrap gap-2 border-b border-border">
-          {tabs.map((tab, index) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveIndex(index)}
-              className={`relative flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors ${
-                activeIndex === index ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <span>{tab.name}</span>
-              <span
-                className={`rounded-full border px-1.5 py-0 text-[10px] font-semibold ${
-                  tab.type === 'message'
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                    : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                }`}
-              >
-                {tab.type.toUpperCase()}
-              </span>
-              {activeIndex === index && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />}
-            </button>
-          ))}
-        </div>
-
-        <MessageDefinitionPanel
-          tab={activeTab}
-          channelName={operation.channelName}
-          allowLoad
-        />
+      <div className="space-y-6">
+        <MessageGroup title="Messages" tabs={messages} channelName={operation.channelName} />
+        <MessageGroup title="Replies" tabs={replies} channelName={operation.channelName} />
       </div>
     </div>
   )
+}
+
+function MessageGroup({
+  title,
+  tabs,
+  channelName,
+}: {
+  title: string
+  tabs: OperationTabData[]
+  channelName: string
+}) {
+  if (tabs.length === 0) {
+    return (
+      <div className="space-y-2 text-sm text-muted-foreground">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground/80">{title}</h3>
+        <p>No {title.toLowerCase()} defined.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground/80">{title}</h3>
+      <div className="space-y-4">
+        {tabs.map((tab) => {
+          const exampleString = formatJSON(tab.example ?? {})
+
+          const handleCopy = async () => {
+            try {
+              await navigator.clipboard.writeText(exampleString)
+            } catch {
+              // ignore
+            }
+          }
+
+          return (
+            <div key={tab.key} className="space-y-4 rounded-lg border border-border/60 bg-card/50 p-4 text-sm">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold">{tab.name}</p>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                      tab.type === 'message'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                        : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                    }`}
+                  >
+                    {tab.type === 'message' ? 'MESSAGE' : 'REPLY'}
+                  </span>
+                </div>
+                {tab.description && <p className="text-sm text-muted-foreground">{tab.description}</p>}
+              </div>
+
+              {tab.parameters.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Parameters</p>
+                  <div className="space-y-3">
+                    {tab.parameters.map((param) => (
+                      <div key={param.name} className="space-y-1">
+                        <div className="flex items-baseline gap-2">
+                          <code className="font-mono text-sm text-foreground">
+                            {param.name}
+                            {!param.required && '?'}
+                          </code>
+                          {param.type && (
+                            <span className="text-xs font-mono text-muted-foreground">{param.type}</span>
+                          )}
+                        </div>
+                        {param.description && (
+                          <p className="text-sm text-muted-foreground">{param.description}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="relative">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Payload</p>
+                <pre className="max-h-[360px] overflow-auto rounded-xl bg-muted/60 p-4 text-xs">
+                  <code>{exampleString}</code>
+                </pre>
+                <div className="absolute top-3 right-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="h-7 rounded-md border border-border/70 bg-background/80 px-2 text-[11px] font-medium text-foreground shadow-sm transition hover:bg-muted"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function formatJSON(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
 }

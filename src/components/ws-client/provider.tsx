@@ -5,7 +5,6 @@ import {
   useCallback,
   useContext,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -15,6 +14,8 @@ import type {
   WSClientState,
   WSMessageEntry,
 } from './types'
+import { useQuery } from '../../utils/use-query'
+import type { WSMessage, WSConnectionState } from './fetcher'
 
 const INITIAL_DRAFT: WSClientDraft = {
   payloadText: '{}',
@@ -23,132 +24,118 @@ const INITIAL_DRAFT: WSClientDraft = {
 const WSClientContext = createContext<WSClientContextValue | null>(null)
 
 export function WSClientProvider({ children }: { children: ReactNode }) {
-  const socketRef = useRef<WebSocket | null>(null)
   const [state, setState] = useState<WSClientState>({
     connected: false,
     messages: [],
     draft: INITIAL_DRAFT,
   })
 
-  const appendMessage = useCallback((entry: WSMessageEntry) => {
-    setState((prev) => ({
-      ...prev,
-      messages: [entry, ...prev.messages].slice(0, 100),
-    }))
-  }, [])
+  const connectQuery = useQuery(async (url: string) => {
+    const { createWebSocketFetcher } = await import('./fetcher')
+    const fetcher = createWebSocketFetcher()
 
-  const setError = useCallback((message?: string) => {
-    setState((prev) => ({ ...prev, error: message }))
-  }, [])
-
-  const disconnect = useCallback(() => {
-    const socket = socketRef.current
-    if (socket) {
-      socket.close()
-      socketRef.current = null
-    }
-    setState((prev) => ({
-      ...prev,
-      connected: false,
-    }))
-  }, [])
-
-  const handleIncomingMessage = useCallback(
-    (payload: unknown, raw?: string | null) => {
-      appendMessage({
+    // Set up message handling
+    fetcher.onMessage((message: WSMessage) => {
+      const entry: WSMessageEntry = {
         id: createMessageId(),
-        direction: 'in',
+        direction: message.direction,
         channel: undefined,
-        payload: payload ?? raw,
+        payload: message.data,
+        timestamp: message.timestamp,
+      }
+      setState((prev) => ({
+        ...prev,
+        messages: [entry, ...prev.messages].slice(0, 100),
+      }))
+    })
+
+    fetcher.onStateChange((connectionState: WSConnectionState) => {
+      setState((prev) => ({
+        ...prev,
+        connected: connectionState.connected,
+        error: connectionState.error,
+      }))
+    })
+
+    await fetcher.connect({ url })
+    return fetcher
+  })
+
+  const sendQuery = useQuery(
+    async (data: { fetcher: any; payload: string; channel?: string }) => {
+      await data.fetcher.send({ data: data.payload })
+      
+      // Add sent message to state
+      let parsed: unknown = data.payload
+      try {
+        parsed = JSON.parse(data.payload)
+      } catch {
+        parsed = data.payload
+      }
+
+      const entry: WSMessageEntry = {
+        id: createMessageId(),
+        direction: 'out',
+        channel: data.channel,
+        payload: parsed,
         timestamp: Date.now(),
-      })
-    },
-    [appendMessage]
+      }
+
+      setState((prev) => ({
+        ...prev,
+        messages: [entry, ...prev.messages].slice(0, 100),
+      }))
+    }
   )
 
   const connect = useCallback(
     (url: string, serverName?: string) => {
       if (!url) {
-        setError('WebSocket URL is required')
+        setState((prev) => ({ ...prev, error: 'WebSocket URL is required' }))
         return
       }
 
-      disconnect()
+      setState((prev) => ({
+        ...prev,
+        url,
+        serverName,
+        connected: false,
+        error: undefined,
+      }))
 
-      try {
-        const socket = new WebSocket(url)
-        socketRef.current = socket
-        setState((prev) => ({
-          ...prev,
-          url,
-          serverName,
-          connected: false,
-          error: undefined,
-        }))
-
-        socket.addEventListener('open', () =>
-          setState((prev) => ({ ...prev, connected: true, error: undefined }))
-        )
-        socket.addEventListener('close', () =>
-          setState((prev) => ({ ...prev, connected: false }))
-        )
-        socket.addEventListener('error', () =>
-          setError('Failed to connect to server')
-        )
-        socket.addEventListener('message', (event) => {
-          const raw = typeof event.data === 'string' ? event.data : null
-          let parsed: unknown = raw
-          if (raw) {
-            try {
-              parsed = JSON.parse(raw)
-            } catch {
-              parsed = raw
-            }
-          }
-
-          handleIncomingMessage(parsed, raw)
-        })
-      } catch (error) {
-        setError(error instanceof Error ? error.message : 'Connection error')
-      }
+      connectQuery.start(url)
     },
-    [disconnect, handleIncomingMessage, setError]
+    [connectQuery]
   )
 
-  const send = useCallback(() => {
-    const socket = socketRef.current
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setError('Connect to a server before sending messages')
-      return
+  const disconnect = useCallback(() => {
+    if (connectQuery.data) {
+      connectQuery.data.disconnect()
+      setState((prev) => ({
+        ...prev,
+        connected: false,
+      }))
     }
+  }, [connectQuery.data])
 
+  const send = useCallback(() => {
     const payloadText = state.draft.payloadText?.trim()
     if (!payloadText) {
-      setError('Payload cannot be empty')
+      setState((prev) => ({ ...prev, error: 'Payload cannot be empty' }))
       return
     }
 
-    try {
-      socket.send(payloadText)
-      let parsed: unknown = payloadText
-      try {
-        parsed = JSON.parse(payloadText)
-      } catch {
-        parsed = payloadText
-      }
-
-      appendMessage({
-        id: createMessageId(),
-        direction: 'out',
-        channel: state.draft.channel,
-        payload: parsed,
-        timestamp: Date.now(),
-      })
-      setError(undefined)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to send message')
+    if (!connectQuery.data) {
+      setState((prev) => ({ ...prev, error: 'Connect to a server before sending messages' }))
+      return
     }
-  }, [appendMessage, setError, state.draft, socketRef])
+
+    sendQuery.start({
+      fetcher: connectQuery.data,
+      payload: payloadText,
+      channel: state.draft.channel,
+    })
+  }, [connectQuery.data, state.draft, sendQuery])
 
   const pushDraft = useCallback(
     (draft: Partial<WSClientDraft> & { payload?: unknown }) => {

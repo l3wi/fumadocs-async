@@ -40,9 +40,7 @@ declare module 'fumadocs-core/source' {
   }
 }
 
-interface AsyncAPIPageData extends PageData {
-  getAsyncAPIPageProps: () => AsyncAPIPageProps
-}
+
 
 export function asyncapiPlugin(): LoaderPlugin {
   return {
@@ -85,12 +83,7 @@ interface AsyncAPISourceOptions extends AsyncSchemaToPagesOptions {
 export async function asyncapiSource(
   asyncapi: AsyncAPIServer,
   options: AsyncAPISourceOptions = {}
-): Promise<
-  Source<{
-    pageData: AsyncAPIPageData
-    metaData: MetaData
-  }>
-> {
+): Promise<Source> {
   const { baseDir = '' } = options
   const schemas = await asyncapi.getSchemas()
   const files: VirtualFile[] = []
@@ -113,13 +106,6 @@ export async function asyncapiSource(
         data: {
           title: entry.title,
           description: entry.description,
-          getAsyncAPIPageProps: () => ({
-            document: entry.document,
-            ...(channelName ? { channel: channelName } : {}),
-            direction: entry.operation?.direction,
-            operationId: entry.operation?.operationId ?? entry.operation?.id,
-            ...(entry.tags?.length ? { tags: entry.tags } : {}),
-          }),
           _asyncapi: {
             ...(channelName ? { channel: channelName } : {}),
             direction: entry.operation?.direction,
