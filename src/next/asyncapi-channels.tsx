@@ -3,6 +3,7 @@ import { resolveAsyncAPIDocument } from '../utils/document'
 import { getChannelAnchorId, slugify } from './helpers'
 import { TagBadge } from './tag-badge'
 import { ChannelTag } from '../ui/components/channel-tag'
+import { getOperationTitle } from '../ui/utils/operation-card'
 
 interface AsyncAPIChannelsPageProps {
   document: AsyncAPIPageProps['document']
@@ -44,7 +45,7 @@ export async function AsyncAPIChannelsPage({
           <div className="space-y-2">
             <div className="text-2xl font-semibold">{renderChannelLink(channel, channelHref)}</div>
             {channel.tags?.map(tag => (
-              <TagBadge key={tag} tag={tag} builder={tagHref} />
+              <TagBadge key={tag} tag={tag} builder={defaultTagHref} />
             ))}
             {channel.description && (
               <p className="text-base text-muted-foreground">{channel.description}</p>
@@ -66,7 +67,7 @@ export async function AsyncAPIChannelsPage({
                     key={operation.operationId ?? operation.id ?? operation.summary}
                     operation={operation}
                     channel={channel}
-                    tagHref={tagHref}
+                    tagHref={tagHref ?? defaultTagHref}
                     href={operationHref?.(operation)}
                   />
                 ))}
@@ -103,7 +104,7 @@ function OperationListCard({
   tagHref?: (tag: string) => string | undefined
   href?: string
 }) {
-  const label = operation.summary || operation.operationId || operation.id || 'Operation'
+  const label = getOperationTitle(operation)
   const card = (
     <div className="space-y-3 rounded-xl border border-border/60 bg-background/50 p-4 transition hover:border-border">
       <div className="space-y-1">

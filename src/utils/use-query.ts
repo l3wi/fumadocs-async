@@ -10,7 +10,7 @@ export function useQuery<I extends unknown[], T>(
 } {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<T>();
-  const [error, setError] = useState<unknown>();
+  const [error, setError] = useState<T>();
   const fnRef = useRef(fn);
   fnRef.current = fn;
 

@@ -4,14 +4,13 @@ import type {
   AsyncAPIServer,
   OperationInfo,
   ProcessedAsyncDocument,
+  ChannelInfo,
 } from '../types'
 import { resolveAsyncAPIDocument } from '../utils/document'
-import { createMessageTabData } from '../ui/utils/message-tab'
-import type {
-  OperationCardRenderData,
-  OperationTabData,
-} from '../ui/components/operation-card.types'
+import type { OperationCardRenderData } from '../ui/components/operation-card.types'
 import type { ServerOption } from '../components/ws-client/types'
+import { buildOperationCardRenderData } from '../ui/utils/operation-card'
+import { resolveClientServers } from '../ui/utils/ws-client'
 
 type AsyncAPIMessagesClientComponent = typeof import('./asyncapi-messages.client').AsyncAPIMessagesClient
 
@@ -59,49 +58,20 @@ export async function AsyncAPIMessagesPage({
     )
   }
 
-  const operationsData = relevant.map((operation) =>
-    buildOperationCardData(operation, channelHref)
-  )
+  const channelMap = buildChannelLookup(processed.channels ?? [])
+  const operationsData = relevant.map((operation) => {
+    const channel = channelMap.get(operation.channel) ?? createFallbackChannel(operation)
+    return buildOperationCardRenderData(channel, operation, {
+      channelHref: channelHref
+        ? () => channelHref(operation)
+        : undefined,
+    })
+  })
 
   const wsClient = await resolveMessagesClientConfig(processed, client)
   const MessagesClient = await getAsyncAPIMessagesClient()
 
   return <MessagesClient operations={operationsData} client={wsClient ?? undefined} />
-}
-
-function buildOperationCardData(
-  operation: OperationInfo,
-  channelHref?: (operation: OperationInfo) => string | undefined
-): OperationCardRenderData {
-  const tags = operation.tags ?? []
-
-  return {
-    id: operation.operationId ?? operation.id ?? operation.channel,
-    title: operation.summary || operation.operationId || operation.id || 'Operation',
-    summary: operation.summary,
-    description: operation.description,
-    tags,
-    direction: operation.direction,
-    channelName: operation.channel,
-    channelHref: channelHref?.(operation),
-    tabs: buildOperationTabs(operation),
-  }
-}
-
-function buildOperationTabs(operation: OperationInfo): OperationTabData[] {
-  const tabs: OperationTabData[] = []
-
-  const messages = operation.messages ?? []
-  messages.forEach((message, index) => {
-    tabs.push(createMessageTabData(message, 'message', index))
-  })
-
-  const replies = operation.reply?.messages ?? []
-  replies.forEach((message, index) => {
-    tabs.push(createMessageTabData(message, 'reply', index))
-  })
-
-  return tabs
 }
 
 interface MessagesClientConfig {
@@ -118,46 +88,25 @@ async function resolveMessagesClientConfig(
     return null
   }
 
-  const servers = await resolveClientServers(processed, client?.servers)
+  const servers = await resolveClientServers(
+    processed,
+    client?.servers ?? undefined
+  )
   return {
     title: client?.title,
     servers,
   }
 }
 
-async function resolveClientServers(
-  processed: ProcessedAsyncDocument,
-  option?: AsyncAPIPageClientOptions['servers']
-): Promise<ServerOption[]> {
-  if (Array.isArray(option)) {
-    return option
+function buildChannelLookup(channels: ChannelInfo[]): Map<string, ChannelInfo> {
+  return new Map(channels.map((channel) => [channel.name, channel]))
+}
+
+function createFallbackChannel(operation: OperationInfo): ChannelInfo {
+  return {
+    name: operation.channel,
+    description: undefined,
+    tags: operation.tags,
+    operations: [],
   }
-
-  if (typeof option === 'function') {
-    const result = await option({ document: processed })
-    return Array.isArray(result) ? result : []
-  }
-
-  return mapDocumentServers(processed)
 }
-
-function mapDocumentServers(processed: ProcessedAsyncDocument): ServerOption[] {
-  if (!processed.servers?.length) return []
-
-  return processed.servers
-    .map((server) => {
-      const url = server.url ?? getServerUrl(processed, server.name)
-      if (!url) return null
-      return {
-        name: server.name ?? server.url ?? server.protocol ?? 'Server',
-        url,
-      }
-    })
-    .filter((server): server is ServerOption => Boolean(server))
-}
-
-function getServerUrl(processed: ProcessedAsyncDocument, serverName?: string) {
-  if (!serverName) return processed.servers[0]?.url
-  return processed.servers.find((server) => server.name === serverName)?.url
-}
-

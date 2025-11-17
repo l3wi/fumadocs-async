@@ -15,7 +15,7 @@ import type {
   WSMessageEntry,
 } from './types'
 import { useQuery } from '../../utils/use-query'
-import type { WSMessage, WSConnectionState } from './fetcher'
+import type { WSMessage, WSConnectionState, WSFetcher } from './fetcher'
 
 const INITIAL_DRAFT: WSClientDraft = {
   payloadText: '{}',
@@ -23,7 +23,20 @@ const INITIAL_DRAFT: WSClientDraft = {
 
 const WSClientContext = createContext<WSClientContextValue | null>(null)
 
-export function WSClientProvider({ children }: { children: ReactNode }) {
+interface WSClientProviderProps {
+  children: ReactNode
+  fetcherFactory?: () => Promise<WSFetcher>
+}
+
+const defaultFetcherFactory = async () => {
+  const { createWebSocketFetcher } = await import('./fetcher')
+  return createWebSocketFetcher()
+}
+
+export function WSClientProvider({
+  children,
+  fetcherFactory = defaultFetcherFactory,
+}: WSClientProviderProps) {
   const [state, setState] = useState<WSClientState>({
     connected: false,
     messages: [],
@@ -31,8 +44,7 @@ export function WSClientProvider({ children }: { children: ReactNode }) {
   })
 
   const connectQuery = useQuery(async (url: string) => {
-    const { createWebSocketFetcher } = await import('./fetcher')
-    const fetcher = createWebSocketFetcher()
+    const fetcher = await fetcherFactory()
 
     // Set up message handling
     fetcher.onMessage((message: WSMessage) => {

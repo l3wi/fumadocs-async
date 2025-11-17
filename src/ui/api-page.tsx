@@ -6,23 +6,34 @@ import type {
   AsyncRenderContext,
   AsyncAPIPageClientOptions,
   ChannelInfo,
-  CodeSample,
   MessageInfo,
   OperationInfo,
   ProcessedAsyncDocument,
   ResolvedSchema,
   Awaitable,
 } from '../types'
-import { WSClientProvider, WSSidebar } from '../components/ws-client'
 import type { ServerOption } from '../components/ws-client'
 import { OperationBadge } from './components/operation-badge'
-import type {
-  OperationCardRenderData,
-  OperationTabData,
-} from './components/operation-card.types'
-import { createMessageTabData } from './utils/message-tab'
+import type { OperationCardRenderData } from './components/operation-card.types'
+import {
+  buildOperationCardRenderData,
+  getOperationTitle,
+} from './utils/operation-card'
+import {
+  buildChannelBlocks,
+  type ChannelBlock,
+  type OperationBlock,
+  type OperationMessageBlock,
+} from './utils/channel-blocks'
+import {
+  renderClientLayout,
+  renderClientProvider,
+  renderClientSidebar,
+} from './utils/client-layout'
+import { resolveClientServers } from './utils/ws-client'
 import { resolveAsyncAPIDocument } from '../utils/document'
 import type { ReactNode, JSX } from 'react'
+import { SectionCard } from './components/section-card'
 
 type OperationCardComponent = typeof import('./components/operation-card.client').OperationCard
 type OperationActionsComponent = typeof import('./components/operation-actions.client').OperationActions
@@ -42,23 +53,6 @@ async function getOperationActions(): Promise<OperationActionsComponent> {
     cachedOperationActions = (await import('./components/operation-actions.client')).OperationActions
   }
   return cachedOperationActions
-}
-
-interface OperationMessageBlock {
-  message: MessageInfo
-  generatedSchema?: string | false
-}
-
-interface OperationBlock {
-  channel: ChannelInfo
-  operation: OperationInfo
-  messages: OperationMessageBlock[]
-  codeSamples: CodeSample[]
-}
-
-interface ChannelBlock {
-  channel: ChannelInfo
-  operations: OperationBlock[]
 }
 
 export function createAsyncAPIPage(
@@ -91,10 +85,10 @@ export function createAsyncAPIPage(
       return pageLayout
     }
 
-    const sidebarServers = await resolveSidebarServers(
-      clientOptions,
+    const sidebarServers = await resolveClientServers(
       processed,
-      renderCtx
+      clientOptions.servers,
+      { getServerUrl: renderCtx.getServerUrl }
     )
     const sidebar = await renderClientSidebar(clientOptions, sidebarServers, renderCtx)
 
@@ -230,7 +224,9 @@ async function renderOperationBlock(
     )
   }
 
-  const cardData = buildOperationCardData(block, options)
+  const cardData = buildOperationCardRenderData(block.channel, block.operation, {
+    channelHref: options.channelHref,
+  })
 
   if (!cardData.tabs.length) {
     return (
@@ -266,157 +262,6 @@ function renderChannelReference(
     return label
   }
 }
-
-async function buildChannelBlocks(
-  processed: ProcessedAsyncDocument,
-  options: AsyncCreatePageOptions,
-  props: AsyncAPIPageProps
-): Promise<ChannelBlock[]> {
-  const blocks: ChannelBlock[] = []
-
-  for (const channel of processed.channels) {
-    const operations = []
-    for (const operation of channel.operations) {
-      if (!matchesFilters(operation, channel, props)) continue
-
-      const codeSamples = options.generateCodeSamples
-        ? await Promise.resolve(options.generateCodeSamples(operation))
-        : []
-
-      const messageBlocks: OperationMessageBlock[] = await Promise.all(
-        operation.messages.map(async (message) => ({
-          message,
-          generatedSchema:
-            options.generateTypeScriptSchema && message
-              ? await Promise.resolve(
-                  options.generateTypeScriptSchema(message, operation.direction)
-                )
-              : undefined,
-        }))
-      )
-
-      operations.push({
-        channel,
-        operation,
-        messages: messageBlocks,
-        codeSamples: codeSamples ?? [],
-      })
-    }
-
-    if (operations.length > 0) {
-      blocks.push({
-        channel,
-        operations,
-      })
-    }
-  }
-
-  return blocks
-}
-
-function buildOperationCardData(
-  block: OperationBlock,
-  options: AsyncCreatePageOptions
-): OperationCardRenderData {
-  const tags = Array.from(
-    new Set([...(block.channel.tags ?? []), ...(block.operation.tags ?? [])])
-  )
-
-  return {
-    id: block.operation.operationId ?? block.operation.id ?? block.channel.name,
-    title: getOperationTitle(block.operation),
-    summary: block.operation.summary,
-    description: block.operation.description ?? block.channel.description,
-    tags,
-    direction: block.operation.direction,
-    channelName: block.channel.name,
-    channelHref: options.channelHref
-      ? options.channelHref(block.channel, block.operation)
-      : undefined,
-    tabs: buildOperationTabs(block),
-  }
-}
-
-function buildOperationTabs(block: OperationBlock): OperationTabData[] {
-  const tabs: OperationTabData[] = []
-
-  block.messages.forEach(({ message }, index) => {
-    tabs.push(createMessageTabData(message, 'message', index))
-  })
-
-  const replies = block.operation.reply?.messages ?? []
-  replies.forEach((message, index) => {
-    tabs.push(createMessageTabData(message, 'reply', index))
-  })
-
-  return tabs
-}
-
-function matchesFilters(
-  operation: OperationInfo,
-  channel: ChannelInfo,
-  props: AsyncAPIPageProps
-) {
-  const channelFilters = normalizeFilterArray(props.channel)
-  if (channelFilters.length > 0) {
-    const candidates = new Set(getChannelFilterCandidates(channel, operation))
-    const hasChannelMatch = channelFilters.some((filter) => candidates.has(filter))
-    if (!hasChannelMatch) {
-      return false
-    }
-  }
-
-  const tagFilters = normalizeFilterArray(props.tags)
-  if (tagFilters.length > 0) {
-    const operationTags = new Set(
-      (operation.tags ?? []).map((tag) => normalizeFilterValue(tag)).filter(Boolean)
-    )
-    const hasTagMatch = tagFilters.some((tag) => operationTags.has(tag))
-    if (!hasTagMatch) {
-      return false
-    }
-  }
-
-  if (props.direction && props.direction !== operation.direction) {
-    return false
-  }
-
-  if (props.operationId) {
-    const id = operation.operationId ?? operation.id
-    if (!id || id !== props.operationId) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function getChannelFilterCandidates(channel: ChannelInfo, operation: OperationInfo): string[] {
-  const values = [
-    operation.channel,
-    channel?.name,
-    ...(channel?.tags ?? []),
-    ...(operation.tags ?? []),
-  ]
-
-  return values
-    .map((candidate) => normalizeFilterValue(candidate))
-    .filter((candidate): candidate is string => Boolean(candidate))
-}
-
-function normalizeFilterArray(value?: string | string[]): string[] {
-  if (!value) return []
-  const values = Array.isArray(value) ? value : [value]
-  return values
-    .map((item) => normalizeFilterValue(item))
-    .filter((item): item is string => Boolean(item))
-}
-
-function normalizeFilterValue(value?: string): string {
-  if (!value) return ''
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
-}
-
 
 function createRenderContext(processed: ProcessedAsyncDocument): AsyncRenderContext {
   return {
@@ -909,13 +754,6 @@ function getSchemaDescription(schema: Record<string, unknown>): string | undefin
   return undefined
 }
 
-function getOperationTitle(operation: OperationInfo) {
-  if (operation.summary) return operation.summary
-  if (operation.operationId) return operation.operationId
-  const action = operation.direction === 'publish' ? 'Publish' : ''
-  return action ? `${action} ${operation.channel}` : operation.channel
-}
-
 function formatJSON(value: unknown) {
   try {
     return JSON.stringify(value, null, 2)
@@ -934,128 +772,4 @@ function TagPill({ label }: { label: string }) {
       {label}
     </span>
   )
-}
-
-interface SectionCardProps {
-  title: string
-  children?: ReactNode
-  className?: string
-  titleSuffix?: ReactNode
-}
-
-function SectionCard({ title, children, className, titleSuffix }: SectionCardProps) {
-  if (isEmptyNode(children)) return null
-
-  return (
-    <section
-      className={cn(
-        'rounded-xl border border-border bg-card/40 p-4 backdrop-blur supports-[backdrop-filter]:bg-card/30',
-        className
-      )}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-        </p>
-        {titleSuffix}
-      </div>
-      <div className="mt-3 text-sm text-foreground">{children}</div>
-    </section>
-  )
-}
-
-function isEmptyNode(node: ReactNode | null | undefined): boolean {
-  if (node === null || node === undefined || node === false) return true
-  if (Array.isArray(node)) {
-    return node.every((child) => isEmptyNode(child))
-  }
-  return false
-}
-
-function cn(...classes: Array<string | undefined | null | false>) {
-  return classes.filter(Boolean).join(' ')
-}
-
-async function resolveSidebarServers(
-  clientOptions: AsyncAPIPageClientOptions,
-  processed: ProcessedAsyncDocument,
-  ctx: AsyncRenderContext
-): Promise<ServerOption[]> {
-  if (Array.isArray(clientOptions.servers)) {
-    return clientOptions.servers
-  }
-
-  if (typeof clientOptions.servers === 'function') {
-    const result = await clientOptions.servers({ document: processed })
-    return Array.isArray(result) ? result : []
-  }
-
-  return mapDocumentServers(processed, ctx)
-}
-
-function mapDocumentServers(
-  processed: ProcessedAsyncDocument,
-  ctx: AsyncRenderContext
-): ServerOption[] {
-  if (!processed.servers?.length) return []
-
-  return processed.servers
-    .map((server) => {
-      const url = server.url ?? ctx.getServerUrl(server.name)
-      if (!url) return null
-      return {
-        name: server.name ?? server.url ?? server.protocol ?? 'Server',
-        url,
-      }
-    })
-    .filter((server): server is ServerOption => server !== null)
-}
-
-async function renderClientSidebar(
-  clientOptions: AsyncAPIPageClientOptions,
-  servers: ServerOption[],
-  ctx: AsyncRenderContext
-): Promise<ReactNode | null> {
-  if (clientOptions.renderSidebar) {
-    const custom = await clientOptions.renderSidebar({ servers, ctx })
-    if (custom !== undefined) {
-      return custom
-    }
-  }
-
-  return <WSSidebar title={clientOptions.title ?? 'WebSocket Client'} servers={servers} />
-}
-
-async function renderClientLayout(
-  clientOptions: AsyncAPIPageClientOptions,
-  content: ReactNode,
-  sidebar: ReactNode,
-  ctx: AsyncRenderContext,
-  servers: ServerOption[]
-): Promise<ReactNode> {
-  if (clientOptions.renderLayout) {
-    return clientOptions.renderLayout({ content, sidebar, ctx, servers })
-  }
-
-  return (
-    <div className="asyncapi-shell flex flex-col gap-8 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-10">
-      <div className="asyncapi-shell-content min-w-0 flex-1">{content}</div>
-      <aside className="asyncapi-shell-sidebar w-full xl:max-w-sm xl:justify-self-end xl:self-stretch">
-        <div className="h-full">{sidebar}</div>
-      </aside>
-    </div>
-  )
-}
-
-async function renderClientProvider(
-  clientOptions: AsyncAPIPageClientOptions,
-  children: ReactNode,
-  ctx: AsyncRenderContext,
-  servers: ServerOption[]
-): Promise<ReactNode> {
-  if (clientOptions.renderProvider) {
-    return clientOptions.renderProvider({ children, ctx, servers })
-  }
-
-  return <WSClientProvider>{children}</WSClientProvider>
 }
