@@ -154,30 +154,43 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
             </button>
           </div>
 
-          <div className="mt-2 max-h-72 space-y-2 overflow-auto rounded-lg border border-border/70 bg-background/80 p-3">
+          <div className="asyncapi-sidebar-log mt-2 max-h-72 space-y-2 overflow-auto rounded-lg border border-border/70 bg-background/80 p-3">
             {messages.length === 0 && (
               <p className="text-xs text-muted-foreground">No messages yet.</p>
             )}
 
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className="rounded-lg border border-border/60 bg-muted/40 p-2"
-              >
-                <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <span>{message.direction === 'out' ? 'Sent' : 'Received'}</span>
-                  <span>{new Date(message.timestamp).toLocaleTimeString()}</span>
-                </div>
-                {message.channel && (
-                  <p className="text-xs text-muted-foreground">Channel: {message.channel}</p>
-                )}
-                {message.payload !== undefined && message.payload !== null && (
-                  <pre className="mt-1 overflow-auto rounded bg-background/70 p-2 text-xs">
-                    {formatPayload(message.payload)}
-                  </pre>
-                )}
-              </div>
-            ))}
+            {messages.map((message) => {
+              const directionLabel = message.direction === 'out' ? 'Sent' : 'Received'
+              const timestamp = new Date(message.timestamp)
+              const headerClass = [
+                'asyncapi-sidebar-entry',
+                message.direction === 'out'
+                  ? 'asyncapi-sidebar-entry--out'
+                  : 'asyncapi-sidebar-entry--in',
+              ].join(' ')
+
+              return (
+                <article key={message.id} className={headerClass}>
+                  <div className="asyncapi-sidebar-entry__header">
+                    <span className="asyncapi-sidebar-entry__pill">{directionLabel}</span>
+                    <time
+                      dateTime={timestamp.toISOString()}
+                      className="asyncapi-sidebar-entry__meta"
+                    >
+                      {timestamp.toLocaleTimeString()}
+                    </time>
+                  </div>
+                  {message.channel && (
+                    <code className="asyncapi-sidebar-entry__channel">{message.channel}</code>
+                  )}
+                  {message.payload !== undefined && message.payload !== null && (
+                    <pre className="asyncapi-sidebar-entry__payload">
+                      {formatPayload(message.payload)}
+                    </pre>
+                  )}
+                </article>
+              )
+            })}
           </div>
         </section>
       </div>

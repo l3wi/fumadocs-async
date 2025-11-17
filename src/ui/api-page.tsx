@@ -32,12 +32,16 @@ async function getOperationActions(): Promise<OperationActionsComponent> {
   return cachedOperationActions
 }
 
+interface OperationMessageBlock {
+  message: MessageInfo
+  generatedSchema?: string | false
+}
+
 interface OperationBlock {
   channel: ChannelInfo
   operation: OperationInfo
-  message?: MessageInfo
+  messages: OperationMessageBlock[]
   codeSamples: CodeSample[]
-  generatedSchema?: string | false
 }
 
 interface ChannelBlock {
@@ -159,11 +163,12 @@ async function renderOperationBlock(
   ctx: AsyncRenderContext,
   options: AsyncCreatePageOptions
 ) {
-  const [schemaSection, descriptionNode] = await Promise.all([
+  const [schemaSection, descriptionNode, replySection] = await Promise.all([
     renderSchemaSection(block, ctx, options),
     block.operation.description
       ? resolveNode(ctx.renderMarkdown(block.operation.description))
       : Promise.resolve(null),
+    renderReplySection(block, ctx, options),
   ])
   const examplesSection = await renderExamplesSection(block)
   const codeSamplesSection = renderCodeSamples(block)
@@ -206,7 +211,7 @@ async function renderOperationBlock(
     </div>
   )
 
-  const leftSections = [playgroundSection, schemaSection, bindingsSection].filter(
+  const leftSections = [playgroundSection, schemaSection, replySection, bindingsSection].filter(
     Boolean
   ) as ReactNode[]
   const secondarySections = [examplesSection, codeSamplesSection].filter(Boolean) as ReactNode[]
@@ -256,26 +261,29 @@ async function buildChannelBlocks(
   for (const channel of processed.channels) {
     const operations = []
     for (const operation of channel.operations) {
-      if (!matchesFilters(operation, props)) continue
+      if (!matchesFilters(operation, channel, props)) continue
 
-      const message = operation.messages[0]
       const codeSamples = options.generateCodeSamples
         ? await Promise.resolve(options.generateCodeSamples(operation))
         : []
 
-      const generatedSchema =
-        options.generateTypeScriptSchema && message
-          ? await Promise.resolve(
-              options.generateTypeScriptSchema(message, operation.direction)
-            )
-          : undefined
+      const messageBlocks: OperationMessageBlock[] = await Promise.all(
+        operation.messages.map(async (message) => ({
+          message,
+          generatedSchema:
+            options.generateTypeScriptSchema && message
+              ? await Promise.resolve(
+                  options.generateTypeScriptSchema(message, operation.direction)
+                )
+              : undefined,
+        }))
+      )
 
       operations.push({
         channel,
         operation,
-        message,
+        messages: messageBlocks,
         codeSamples: codeSamples ?? [],
-        generatedSchema,
       })
     }
 
@@ -290,9 +298,29 @@ async function buildChannelBlocks(
   return blocks
 }
 
-function matchesFilters(operation: OperationInfo, props: AsyncAPIPageProps) {
-  if (props.channel && props.channel !== operation.channel) {
-    return false
+function matchesFilters(
+  operation: OperationInfo,
+  channel: ChannelInfo,
+  props: AsyncAPIPageProps
+) {
+  const channelFilters = normalizeFilterArray(props.channel)
+  if (channelFilters.length > 0) {
+    const candidates = new Set(getChannelFilterCandidates(channel, operation))
+    const hasChannelMatch = channelFilters.some((filter) => candidates.has(filter))
+    if (!hasChannelMatch) {
+      return false
+    }
+  }
+
+  const tagFilters = normalizeFilterArray(props.tags)
+  if (tagFilters.length > 0) {
+    const operationTags = new Set(
+      (operation.tags ?? []).map((tag) => normalizeFilterValue(tag)).filter(Boolean)
+    )
+    const hasTagMatch = tagFilters.some((tag) => operationTags.has(tag))
+    if (!hasTagMatch) {
+      return false
+    }
   }
 
   if (props.direction && props.direction !== operation.direction) {
@@ -307,6 +335,32 @@ function matchesFilters(operation: OperationInfo, props: AsyncAPIPageProps) {
   }
 
   return true
+}
+
+function getChannelFilterCandidates(channel: ChannelInfo, operation: OperationInfo): string[] {
+  const values = [
+    operation.channel,
+    channel?.name,
+    ...(channel?.tags ?? []),
+    ...(operation.tags ?? []),
+  ]
+
+  return values
+    .map((candidate) => normalizeFilterValue(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate))
+}
+
+function normalizeFilterArray(value?: string | string[]): string[] {
+  if (!value) return []
+  const values = Array.isArray(value) ? value : [value]
+  return values
+    .map((item) => normalizeFilterValue(item))
+    .filter((item): item is string => Boolean(item))
+}
+
+function normalizeFilterValue(value?: string): string {
+  if (!value) return ''
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
 async function resolveDocument(
@@ -512,7 +566,7 @@ async function renderSchemaSection(
   ctx: AsyncRenderContext,
   options: AsyncCreatePageOptions
 ) {
-  if (!block.message) {
+  if (!block.messages.length) {
     return (
       <SectionCard title="Message Schema">
         <p className="text-sm text-muted-foreground">
@@ -522,73 +576,77 @@ async function renderSchemaSection(
     )
   }
 
-  const schemaContent = block.message.schema ?? block.message.payload
-  let schemaNode: ReactNode | null = null
-  const schemaEntries =
-    schemaContent && typeof schemaContent === 'object'
-      ? buildSchemaEntries(schemaContent)
-      : []
+  const OperationActions = await getOperationActions()
+  const cards = await Promise.all(
+    block.messages.map(async ({ message, generatedSchema }, index) => {
+      const label = formatMessageLabel(message, index, block.messages.length)
+      const schemaNode = await renderSchemaContentForMessage(
+        message,
+        label,
+        ctx,
+        options,
+        generatedSchema
+      )
 
-  if (options.schemaUI?.render && schemaContent) {
-    const resolvedSchema: ResolvedSchema = { schema: schemaContent }
-    schemaNode = await options.schemaUI.render({ root: resolvedSchema }, ctx)
-  } else if (schemaEntries.length > 0) {
-    schemaNode = <SchemaFields entries={schemaEntries} />
-  } else if (schemaContent) {
-    schemaNode = (
-      <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
-        {formatJSON(schemaContent)}
-      </pre>
-    )
-  }
-
-  const tsNode =
-    typeof block.generatedSchema === 'string' ? (
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          TypeScript
-        </p>
-        <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
-          {block.generatedSchema}
-        </pre>
-      </div>
-    ) : null
-
-  if (!schemaNode && !tsNode) {
-    schemaNode = (
-      <p className="text-sm text-muted-foreground">
-        Schema details are not provided for this message.
-      </p>
-    )
-  }
+      return (
+        <div
+          key={`${label}-${index}`}
+          className="space-y-3 rounded-lg border border-border/50 bg-card/40 p-4"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold leading-tight">{label}</p>
+              {message.description && (
+                <p className="text-xs text-muted-foreground">{message.description}</p>
+              )}
+            </div>
+            <OperationActions
+              operation={block.operation}
+              message={message}
+              className="w-auto whitespace-nowrap"
+            />
+          </div>
+          {schemaNode}
+        </div>
+      )
+    })
+  )
 
   return (
-    <SectionCard title="Message Schema">
-      <div className="space-y-4">
-        {schemaNode}
-        {tsNode}
-      </div>
+    <SectionCard title={block.messages.length > 1 ? 'Message Schemas' : 'Message Schema'}>
+      <div className="space-y-4">{cards}</div>
     </SectionCard>
   )
 }
 
 async function renderExamplesSection(block: OperationBlock) {
-  if (!block.message?.examples?.length) return null
+  const entries = block.messages
+    .map(({ message }, index) => ({ message, index }))
+    .filter(({ message }) => message.examples && message.examples.length)
 
-  const OperationActions = await getOperationActions()
+  if (!entries.length) return null
 
   return (
-    <SectionCard
-      title="Examples"
-      titleSuffix={
-        <OperationActions operation={block.operation} message={block.message} className="w-auto" />
-      }
-    >
-      <div className="flex flex-col gap-4">
-        {block.message.examples.map((example, index) => (
-          <pre key={index} className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
-            {formatJSON(example)}
-          </pre>
+    <SectionCard title="Examples">
+      <div className="space-y-4">
+        {entries.map(({ message, index }) => (
+          <div key={`${formatMessageLabel(message, index, block.messages.length)}-examples`} className="space-y-2">
+            {block.messages.length > 1 && (
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {formatMessageLabel(message, index, block.messages.length)}
+              </p>
+            )}
+            <div className="flex flex-col gap-3">
+              {message.examples?.map((example, exampleIndex) => (
+                <pre
+                  key={exampleIndex}
+                  className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs"
+                >
+                  {formatJSON(example)}
+                </pre>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </SectionCard>
@@ -617,15 +675,205 @@ function renderCodeSamples(block: OperationBlock) {
 }
 
 function renderBindings(block: OperationBlock) {
-  if (!block.operation.bindings) return null
+  const sections: ReactNode[] = []
+
+  if (block.operation.bindings) {
+    sections.push(
+      <div key="operation" className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Operation
+        </p>
+        <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
+          {formatJSON(block.operation.bindings)}
+        </pre>
+      </div>
+    )
+  }
+
+  block.messages.forEach(({ message }, index) => {
+    if (!message.bindings) return
+    sections.push(
+      <div key={`message-${index}`} className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {formatMessageLabel(message, index, block.messages.length)}
+        </p>
+        <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
+          {formatJSON(message.bindings)}
+        </pre>
+      </div>
+    )
+  })
+
+  if (!sections.length) return null
 
   return (
     <SectionCard title="Protocol Bindings">
-      <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
-        {formatJSON(block.operation.bindings)}
-      </pre>
+      <div className="space-y-3">{sections}</div>
     </SectionCard>
   )
+}
+
+async function renderReplySection(
+  block: OperationBlock,
+  ctx: AsyncRenderContext,
+  options: AsyncCreatePageOptions
+) {
+  const reply = block.operation.reply
+  if (!reply) return null
+
+  const sections: ReactNode[] = []
+
+  if (reply.address) {
+    sections.push(
+      <div key="reply-address" className="space-y-1 text-sm text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wide">Reply Address</p>
+        <p className="font-mono text-xs sm:text-sm">{reply.address.location}</p>
+        {reply.address.description && <p className="text-xs">{reply.address.description}</p>}
+      </div>
+    )
+  }
+
+  if (reply.channel) {
+    sections.push(
+      <div key="reply-channel" className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Reply Channel
+        </p>
+        <div className="space-y-1 text-sm text-muted-foreground">
+          {(reply.channel.name || reply.channel.id) && (
+            <p className="font-medium text-foreground">
+              {reply.channel.name ?? reply.channel.id}
+            </p>
+          )}
+          {reply.channel.address && (
+            <p>
+              Address: <span className="font-mono text-xs">{reply.channel.address}</span>
+            </p>
+          )}
+          {reply.channel.description && <p>{reply.channel.description}</p>}
+        </div>
+        {reply.channel.bindings && (
+          <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
+            {formatJSON(reply.channel.bindings)}
+          </pre>
+        )}
+      </div>
+    )
+  }
+
+  if (reply.bindings) {
+    sections.push(
+      <div key="reply-bindings" className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Reply Bindings
+        </p>
+        <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
+          {formatJSON(reply.bindings)}
+        </pre>
+      </div>
+    )
+  }
+
+  if (reply.messages.length) {
+    const replyMessages = await Promise.all(
+      reply.messages.map(async (message, index) => {
+        const label = formatMessageLabel(message, index, reply.messages.length)
+        const schemaNode = await renderSchemaContentForMessage(message, label, ctx, options)
+
+        return (
+          <div
+            key={`${label}-${index}`}
+            className="space-y-3 rounded-lg border border-border/40 bg-background/50 p-4"
+          >
+            <div className="space-y-1">
+              <p className="text-sm font-semibold leading-tight">{label}</p>
+              {message.description && (
+                <p className="text-xs text-muted-foreground">{message.description}</p>
+              )}
+            </div>
+            {schemaNode}
+          </div>
+        )
+      })
+    )
+
+    sections.push(
+      <div key="reply-messages" className="space-y-3">
+        <p className="text-sm font-semibold text-muted-foreground">Expected Reply Messages</p>
+        <div className="space-y-3">{replyMessages}</div>
+      </div>
+    )
+  }
+
+  if (!sections.length) return null
+
+  return (
+    <SectionCard title="Reply Details">
+      <div className="space-y-4">{sections}</div>
+    </SectionCard>
+  )
+}
+
+async function renderSchemaContentForMessage(
+  message: MessageInfo,
+  label: string,
+  ctx: AsyncRenderContext,
+  options: AsyncCreatePageOptions,
+  generatedSchema?: string | false
+): Promise<ReactNode> {
+  const schemaContent = message.schema ?? message.payload
+  let schemaNode: ReactNode | null = null
+  const schemaEntries =
+    schemaContent && typeof schemaContent === 'object'
+      ? buildSchemaEntries(schemaContent)
+      : []
+
+  if (options.schemaUI?.render && schemaContent) {
+    const resolvedSchema: ResolvedSchema = { schema: schemaContent }
+    schemaNode = await options.schemaUI.render({ root: resolvedSchema }, ctx)
+  } else if (schemaEntries.length > 0) {
+    schemaNode = <SchemaFields entries={schemaEntries} />
+  } else if (schemaContent) {
+    schemaNode = (
+      <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
+        {formatJSON(schemaContent)}
+      </pre>
+    )
+  }
+
+  const tsNode =
+    typeof generatedSchema === 'string' ? (
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          TypeScript
+        </p>
+        <pre className="overflow-auto rounded-lg bg-muted/70 p-3 font-mono text-xs">
+          {generatedSchema}
+        </pre>
+      </div>
+    ) : null
+
+  if (!schemaNode && !tsNode) {
+    schemaNode = (
+      <p className="text-sm text-muted-foreground">
+        Schema details are not provided for {label.toLowerCase()}.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {schemaNode}
+      {tsNode}
+    </div>
+  )
+}
+
+function formatMessageLabel(message: MessageInfo, index: number, total: number) {
+  if (message.title) return message.title
+  if (message.name) return message.name
+  if (total > 1) return `Message ${index + 1}`
+  return 'Message'
 }
 
 function renderComponentsOverview(components?: AsyncComponents) {

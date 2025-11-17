@@ -10,6 +10,8 @@ import type {
   ChannelInterface,
   MessageInterface,
   OperationInterface,
+  OperationReplyInterface,
+  OperationReplyAddressInterface,
   SchemaInterface,
   ServerInterface,
   TagsInterface,
@@ -154,6 +156,8 @@ function mapOperation(
     .all()
     .map(mapMessage)
 
+  const reply = mapOperationReply(operation.reply())
+
   return {
     channel: channelName,
     direction: mapDirection(operation.action()),
@@ -165,6 +169,7 @@ function mapOperation(
     bindings: raw.bindings,
     tags,
     servers: servers.length ? servers : undefined,
+    reply,
   }
 }
 
@@ -189,6 +194,7 @@ function mapMessage(message: MessageInterface): MessageInfo {
     description?: string
     summary?: string
     examples?: unknown[]
+    bindings?: Record<string, unknown>
   }
 
   const schemaExamples = schema?.examples?.()
@@ -202,6 +208,53 @@ function mapMessage(message: MessageInterface): MessageInfo {
     payload: schemaJson,
     examples,
     schema: schemaJson,
+    bindings: messageJson.bindings,
+  }
+}
+
+function mapOperationReply(
+  reply?: OperationReplyInterface
+): OperationInfo['reply'] {
+  if (!reply) return undefined
+
+  const replyJson = reply.json() as { bindings?: Record<string, unknown> }
+  const messages = reply
+    .messages()
+    .all()
+    .map(mapMessage)
+
+  const channel = reply.channel()
+  const mappedChannel = channel ? mapReplyChannel(channel) : undefined
+  const address = reply.address() ? mapReplyAddress(reply.address()) : undefined
+
+  if (!mappedChannel && !address && messages.length === 0 && !replyJson.bindings) {
+    return undefined
+  }
+
+  return {
+    channel: mappedChannel,
+    address,
+    messages,
+    bindings: replyJson.bindings,
+  }
+}
+
+function mapReplyChannel(channel: ChannelInterface) {
+  const raw = channel.json() as { bindings?: Record<string, unknown> }
+  return {
+    id: channel.id() ?? undefined,
+    name: channel.id() ?? channel.address() ?? channel.meta().pointer,
+    description: channel.description() ?? undefined,
+    address: channel.address() ?? undefined,
+    bindings: raw.bindings,
+  }
+}
+
+function mapReplyAddress(address?: OperationReplyAddressInterface) {
+  if (!address) return undefined
+  return {
+    location: address.location(),
+    description: address.description() ?? undefined,
   }
 }
 

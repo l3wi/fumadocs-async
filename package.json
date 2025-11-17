@@ -47,7 +47,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun run build:lib && bun run build:css",
+    "build": "bun run build:lib && node scripts/ensure-use-client.mjs && bun run build:css",
     "build:lib": "tsup",
     "build:css": "mkdir -p ./dist/css && cp ./src/styles/preset.css ./dist/css/preset.css",
     "dev": "tsup --watch",

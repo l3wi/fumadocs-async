@@ -6,3 +6,120 @@
  * Tailwind's base styles into your site.
  */
 @source '../**/*.js';
+
+.asyncapi-sidebar {
+  --shiki-light: #005cc5;
+  --shiki-dark: #79b8ff;
+  --shiki-light-bg: #ffffff;
+  --shiki-dark-bg: #24292e;
+  --asyncapi-sidebar-entry-border: rgba(0, 92, 197, 0.25);
+  --asyncapi-sidebar-entry-bg: rgba(0, 92, 197, 0.04);
+  --asyncapi-sidebar-entry-code-bg: rgba(0, 92, 197, 0.08);
+  --asyncapi-sidebar-entry-code-color: var(--shiki-light);
+  --asyncapi-sidebar-entry-text: #1f2937;
+}
+
+.dark .asyncapi-sidebar {
+  --asyncapi-sidebar-entry-border: rgba(121, 184, 255, 0.35);
+  --asyncapi-sidebar-entry-bg: rgba(121, 184, 255, 0.08);
+  --asyncapi-sidebar-entry-code-bg: rgba(121, 184, 255, 0.12);
+  --asyncapi-sidebar-entry-code-color: var(--shiki-dark);
+  --asyncapi-sidebar-entry-text: rgba(255, 255, 255, 0.85);
+}
+
+.asyncapi-sidebar-log {
+  border-radius: 1rem;
+  border: 1px solid var(--asyncapi-sidebar-entry-border);
+  background: var(--asyncapi-sidebar-entry-bg);
+  padding: 0.85rem;
+}
+
+.asyncapi-sidebar-entry {
+  border-radius: 0.9rem;
+  border: 1px solid var(--asyncapi-sidebar-entry-border);
+  background: var(--asyncapi-sidebar-entry-bg);
+  padding: 0.75rem;
+  color: var(--asyncapi-sidebar-entry-text);
+  font-family: var(
+    --default-mono-font-family,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    'Liberation Mono',
+    'Courier New',
+    monospace
+  );
+  font-size: 0.85rem;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.asyncapi-sidebar-entry__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+}
+
+.asyncapi-sidebar-entry__pill {
+  border: 1px solid currentColor;
+  border-radius: 9999px;
+  padding: 0.15rem 0.6rem;
+  font-weight: 600;
+  color: var(--asyncapi-sidebar-entry-code-color);
+}
+
+.asyncapi-sidebar-entry__meta {
+  font-size: 0.65rem;
+  color: var(--asyncapi-sidebar-entry-text);
+}
+
+.asyncapi-sidebar-entry__channel {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--asyncapi-sidebar-entry-code-color);
+}
+
+.asyncapi-sidebar-entry__payload {
+  margin: 0;
+  border-radius: 0.75rem;
+  background: var(--asyncapi-sidebar-entry-code-bg);
+  color: var(--asyncapi-sidebar-entry-code-color);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.65rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.asyncapi-sidebar-entry__payload::-webkit-scrollbar {
+  width: 0.35rem;
+  height: 0.35rem;
+}
+
+.asyncapi-sidebar-entry__payload::-webkit-scrollbar-thumb {
+  background: var(--asyncapi-sidebar-entry-border);
+  border-radius: 999px;
+}
+
+.asyncapi-sidebar-entry__payload::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.asyncapi-sidebar-entry--out .asyncapi-sidebar-entry__pill {
+  color: #059669;
+  border-color: rgba(5, 150, 105, 0.4);
+}
+
+.asyncapi-sidebar-entry--in .asyncapi-sidebar-entry__pill {
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.4);
+}

@@ -174,9 +174,18 @@ function buildComponentProps(entry: AsyncPageEntry): string[] {
     )
   }
 
+  if (entry.tags?.length) {
+    props.push(`tags=${formatArrayAttribute(entry.tags)}`)
+  }
+
   return props
 }
 
 function escapeAttribute(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function formatArrayAttribute(values: string[]): string {
+  const serialized = values.map((value) => `"${escapeAttribute(value)}"`).join(', ')
+  return `{[${serialized}]}`
 }

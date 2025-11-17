@@ -49,6 +49,7 @@ export interface OperationInfo {
   bindings?: Record<string, unknown>
   tags?: string[]
   servers?: string[]
+  reply?: OperationReplyInfo
 }
 
 export interface MessageInfo {
@@ -58,6 +59,7 @@ export interface MessageInfo {
   payload?: unknown
   examples?: unknown[]
   schema?: unknown
+  bindings?: Record<string, unknown>
 }
 
 export interface ServerInfo {
@@ -66,6 +68,26 @@ export interface ServerInfo {
   protocol: string
   description?: string
   bindings?: Record<string, unknown>
+}
+
+export interface OperationReplyInfo {
+  channel?: ReplyChannelInfo
+  address?: ReplyAddressInfo
+  messages: MessageInfo[]
+  bindings?: Record<string, unknown>
+}
+
+export interface ReplyChannelInfo {
+  id?: string
+  name?: string
+  description?: string
+  address?: string
+  bindings?: Record<string, unknown>
+}
+
+export interface ReplyAddressInfo {
+  location: string
+  description?: string
 }
 
 export type AsyncComponents = Record<string, unknown>
@@ -159,9 +181,10 @@ export interface AsyncAPIPageProps {
     | string
     | ProcessedAsyncDocument
   operations?: OperationInfo[]
-  channel?: string
+  channel?: string | string[]
   direction?: 'publish' | 'subscribe'
   operationId?: string
+  tags?: string | string[]
 }
 
 export interface AsyncCreatePageOptions {

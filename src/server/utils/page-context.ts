@@ -6,16 +6,27 @@ import type {
   ProcessedAsyncDocument,
 } from '../../types'
 
+type AsyncPageFrontmatter = Record<string, unknown> & {
+  _asyncapi?: {
+    document: string
+    channel?: string
+    direction?: 'publish' | 'subscribe'
+    operationId?: string
+    tags?: string[]
+  }
+}
+
 export interface AsyncPageEntry {
   document: ProcessedAsyncDocument
-  channel: ChannelInfo
+  channel?: ChannelInfo
   operation?: OperationInfo
   documentKey: string
   title: string
   description?: string
-  frontmatter: Record<string, unknown>
+  frontmatter: AsyncPageFrontmatter
   slug: string
   groupSlug?: string
+  tags?: string[]
 }
 
 export function buildPageEntries(
@@ -24,9 +35,13 @@ export function buildPageEntries(
   options: AsyncSchemaToPagesOptions
 ): AsyncPageEntry[] {
   const per = options.per ?? 'channel'
+  if (per === 'tag') {
+    return buildTagEntries(documentKey, document, options)
+  }
+
   if (per !== 'channel' && per !== 'operation') {
     throw new Error(
-      `Unsupported "per" option "${per}". Supported values are "channel" and "operation".`
+      `Unsupported "per" option "${per}". Supported values are "channel", "operation", and "tag".`
     )
   }
 
@@ -81,7 +96,7 @@ function createEntry({
     ? options.description(ctx)
     : defaultDescription
 
-  const frontmatter = {
+  const frontmatter: AsyncPageFrontmatter = {
     title,
     ...(description ? { description } : {}),
     full: true,
@@ -107,6 +122,61 @@ function createEntry({
     ),
     groupSlug: resolveGroupSlug(channel, operation, options.groupBy),
   }
+}
+
+function buildTagEntries(
+  documentKey: string,
+  document: ProcessedAsyncDocument,
+  options: AsyncSchemaToPagesOptions
+): AsyncPageEntry[] {
+  const tagSet = new Set<string>()
+
+  for (const channel of document.channels) {
+    for (const operation of channel.operations) {
+      for (const tag of operation.tags ?? []) {
+        const normalized = normalizeTagName(tag)
+        if (normalized) {
+          tagSet.add(normalized)
+        }
+      }
+    }
+  }
+
+  const entries: AsyncPageEntry[] = []
+
+  for (const tag of tagSet) {
+    const syntheticChannel = createTagChannel(tag)
+    const entry = createEntry({
+      documentKey,
+      document,
+      channel: syntheticChannel,
+      options,
+    })
+
+    entry.tags = [tag]
+    const meta = entry.frontmatter._asyncapi ?? {}
+    meta.tags = entry.tags
+    entry.frontmatter._asyncapi = meta
+
+    entries.push(entry)
+  }
+
+  return entries
+}
+
+function createTagChannel(tag: string): ChannelInfo {
+  return {
+    name: tag,
+    description: `Operations tagged "${tag}"`,
+    tags: [tag],
+    operations: [],
+  }
+}
+
+function normalizeTagName(value?: string): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
 }
 
 function resolveGroupSlug(

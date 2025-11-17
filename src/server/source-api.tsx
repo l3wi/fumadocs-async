@@ -105,6 +105,7 @@ export async function asyncapiSource(
       const pathWithBase = [normalizedBase, relativePath]
         .filter(Boolean)
         .join('/')
+      const channelName = entry.channel?.name
 
       files.push({
         type: 'page',
@@ -114,14 +115,16 @@ export async function asyncapiSource(
           description: entry.description,
           getAsyncAPIPageProps: () => ({
             document: entry.document,
-            channel: entry.channel.name,
+            ...(channelName ? { channel: channelName } : {}),
             direction: entry.operation?.direction,
             operationId: entry.operation?.operationId ?? entry.operation?.id,
+            ...(entry.tags?.length ? { tags: entry.tags } : {}),
           }),
           _asyncapi: {
-            channel: entry.channel.name,
+            ...(channelName ? { channel: channelName } : {}),
             direction: entry.operation?.direction,
             operationId: entry.operation?.operationId ?? entry.operation?.id,
+            ...(entry.tags?.length ? { tags: entry.tags } : {}),
           },
         },
       })
