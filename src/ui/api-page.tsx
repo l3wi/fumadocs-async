@@ -12,18 +12,30 @@ import type {
   ProcessedAsyncDocument,
   ResolvedSchema,
   Awaitable,
-  AsyncComponents,
 } from '../types'
-import { processDocument } from '../server/create/process-document'
-import type { Parser as AsyncAPIParser } from '@asyncapi/parser'
 import { WSClientProvider, WSSidebar } from '../components/ws-client'
 import type { ServerOption } from '../components/ws-client'
 import { OperationBadge } from './components/operation-badge'
+import type {
+  OperationCardRenderData,
+  OperationTabData,
+} from './components/operation-card.types'
+import { createMessageTabData } from './utils/message-tab'
+import { resolveAsyncAPIDocument } from '../utils/document'
 import type { ReactNode, JSX } from 'react'
 
+type OperationCardComponent = typeof import('./components/operation-card.client').OperationCard
 type OperationActionsComponent = typeof import('./components/operation-actions.client').OperationActions
 
+let cachedOperationCard: OperationCardComponent | null = null
 let cachedOperationActions: OperationActionsComponent | null = null
+
+async function getOperationCard(): Promise<OperationCardComponent> {
+  if (!cachedOperationCard) {
+    cachedOperationCard = (await import('./components/operation-card.client')).OperationCard
+  }
+  return cachedOperationCard
+}
 
 async function getOperationActions(): Promise<OperationActionsComponent> {
   if (!cachedOperationActions) {
@@ -54,7 +66,7 @@ export function createAsyncAPIPage(
   options: AsyncCreatePageOptions = {}
 ) {
   const AsyncAPIPage = async (props: AsyncAPIPageProps) => {
-    const processed = await resolveDocument(server, props.document)
+    const processed = await resolveAsyncAPIDocument(props.document, server)
     const renderCtx = createRenderContext(processed)
     const channelBlocks = await buildChannelBlocks(processed, options, props)
 
@@ -116,7 +128,6 @@ async function renderPageLayout(
       children: await renderChannelBlock(block, ctx, options),
     }))
   )
-  const componentsSection = renderComponentsOverview(processed.components)
 
   if (options.content?.renderPageLayout) {
     return await options.content.renderPageLayout({ channels: channelSlots }, ctx)
@@ -125,21 +136,14 @@ async function renderPageLayout(
   return (
     <div className="asyncapi-page flex flex-col gap-16 text-sm">
       {channelSlots.map((slot, index) => (
-        <section
+        <div
           key={slot.item.name ?? index}
           id={`channel-${slot.item.name}`}
           className="asyncapi-channel flex flex-col gap-6"
         >
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">{slot.item.name}</h2>
-            {slot.item.description && (
-              <p className="text-base text-muted-foreground">{slot.item.description}</p>
-            )}
-          </div>
           <div className="flex flex-col gap-6">{slot.children}</div>
-        </section>
+        </div>
       ))}
-      {componentsSection}
     </div>
   )
 }
@@ -163,72 +167,55 @@ async function renderOperationBlock(
   ctx: AsyncRenderContext,
   options: AsyncCreatePageOptions
 ) {
-  const [schemaSection, descriptionNode, replySection] = await Promise.all([
-    renderSchemaSection(block, ctx, options),
-    block.operation.description
-      ? resolveNode(ctx.renderMarkdown(block.operation.description))
-      : Promise.resolve(null),
-    renderReplySection(block, ctx, options),
-  ])
-  const examplesSection = await renderExamplesSection(block)
-  const codeSamplesSection = renderCodeSamples(block)
-  const bindingsSection = renderBindings(block)
-  const playgroundContent =
-    options.playground?.enabled === false
-      ? null
-      : options.playground?.render
-      ? await options.playground.render({ op: block.operation, ctx })
-      : null
-  const playgroundSection = playgroundContent ? (
-    <SectionCard title="Playground">{playgroundContent}</SectionCard>
-  ) : null
-
-  const tags = Array.from(
-    new Set([...(block.channel.tags ?? []), ...(block.operation.tags ?? [])])
-  )
-
-  const header = (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-[6px] text-[11px] uppercase tracking-wide text-muted-foreground">
-        <OperationBadge direction={block.operation.direction} />
-        <span className="font-mono text-xs text-muted-foreground">
-          {block.channel.name}
-        </span>
-        {tags.map((tag) => (
-          <TagPill key={tag} label={tag} />
-        ))}
-      </div>
-      <div className="min-w-0 space-y-1">
-        <h3 className="text-xl font-semibold leading-tight">
-          {getOperationTitle(block.operation)}
-        </h3>
-        {descriptionNode && (
-          <div className="prose prose-sm text-muted-foreground">
-            {descriptionNode}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-
-  const leftSections = [playgroundSection, schemaSection, replySection, bindingsSection].filter(
-    Boolean
-  ) as ReactNode[]
-  const secondarySections = [examplesSection, codeSamplesSection].filter(Boolean) as ReactNode[]
-
-  if (leftSections.length === 0) {
-    leftSections.push(
-      <SectionCard key="details" title="Details">
-        <p className="text-sm text-muted-foreground">
-          No structured schema or bindings are available for this operation.
-        </p>
-      </SectionCard>
-    )
-  }
-
-  const sections = [...leftSections, ...secondarySections]
-
   if (options.content?.renderOperationLayout) {
+    const [schemaSection, descriptionNode, replySection] = await Promise.all([
+      renderSchemaSection(block, ctx, options),
+      block.operation.description
+        ? resolveNode(ctx.renderMarkdown(block.operation.description))
+        : Promise.resolve(null),
+      renderReplySection(block, ctx, options),
+    ])
+    const examplesSection = await renderExamplesSection(block)
+    const codeSamplesSection = renderCodeSamples(block)
+    const bindingsSection = renderBindings(block)
+    const playgroundContent =
+      options.playground?.enabled === false
+        ? null
+        : options.playground?.render
+        ? await options.playground.render({ op: block.operation, ctx })
+        : null
+    const playgroundSection = playgroundContent ? (
+      <SectionCard title="Playground">{playgroundContent}</SectionCard>
+    ) : null
+
+    const tags = Array.from(
+      new Set([...(block.channel.tags ?? []), ...(block.operation.tags ?? [])])
+    )
+
+    const header = (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-[6px] text-[11px] uppercase tracking-wide text-muted-foreground">
+          <OperationBadge direction={block.operation.direction} />
+          <span className="font-mono text-xs text-muted-foreground">
+            {renderChannelReference(block.channel, block.operation, options.channelHref)}
+          </span>
+          {tags.map((tag) => (
+            <TagPill key={tag} label={tag} />
+          ))}
+        </div>
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-xl font-semibold leading-tight">
+            {getOperationTitle(block.operation)}
+          </h3>
+          {descriptionNode && (
+            <div className="prose prose-sm text-muted-foreground">
+              {descriptionNode}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+
     return await options.content.renderOperationLayout(
       {
         header,
@@ -243,12 +230,41 @@ async function renderOperationBlock(
     )
   }
 
-  return (
-    <article className="asyncapi-operation space-y-6 rounded-2xl border border-border/60 bg-card/50 p-5 text-sm shadow-sm">
-      {header}
-      <div className="flex flex-col gap-4">{sections}</div>
-    </article>
-  )
+  const cardData = buildOperationCardData(block, options)
+
+  if (!cardData.tabs.length) {
+    return (
+      <SectionCard title="Operation Details">
+        <p className="text-sm text-muted-foreground">
+          This operation does not define any messages or replies yet.
+        </p>
+      </SectionCard>
+    )
+  }
+
+  const OperationCard = await getOperationCard()
+  return <OperationCard operation={cardData} />
+}
+
+function renderChannelReference(
+  channel: ChannelInfo,
+  operation: OperationInfo | undefined,
+  resolver: AsyncCreatePageOptions['channelHref'] | undefined
+): ReactNode {
+  const label = channel?.name ?? 'Channel'
+  if (!resolver) return label
+
+  try {
+    const href = resolver(channel, operation)
+    if (!href) return label
+    return (
+      <a href={href} className="text-foreground transition hover:text-primary hover:underline">
+        {label}
+      </a>
+    )
+  } catch {
+    return label
+  }
 }
 
 async function buildChannelBlocks(
@@ -296,6 +312,44 @@ async function buildChannelBlocks(
   }
 
   return blocks
+}
+
+function buildOperationCardData(
+  block: OperationBlock,
+  options: AsyncCreatePageOptions
+): OperationCardRenderData {
+  const tags = Array.from(
+    new Set([...(block.channel.tags ?? []), ...(block.operation.tags ?? [])])
+  )
+
+  return {
+    id: block.operation.operationId ?? block.operation.id ?? block.channel.name,
+    title: getOperationTitle(block.operation),
+    summary: block.operation.summary,
+    description: block.operation.description ?? block.channel.description,
+    tags,
+    direction: block.operation.direction,
+    channelName: block.channel.name,
+    channelHref: options.channelHref
+      ? options.channelHref(block.channel, block.operation)
+      : undefined,
+    tabs: buildOperationTabs(block),
+  }
+}
+
+function buildOperationTabs(block: OperationBlock): OperationTabData[] {
+  const tabs: OperationTabData[] = []
+
+  block.messages.forEach(({ message }, index) => {
+    tabs.push(createMessageTabData(message, 'message', index))
+  })
+
+  const replies = block.operation.reply?.messages ?? []
+  replies.forEach((message, index) => {
+    tabs.push(createMessageTabData(message, 'reply', index))
+  })
+
+  return tabs
 }
 
 function matchesFilters(
@@ -363,178 +417,6 @@ function normalizeFilterValue(value?: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
-async function resolveDocument(
-  server: AsyncAPIServer,
-  documentInput: AsyncAPIPageProps['document']
-): Promise<ProcessedAsyncDocument> {
-  if (documentInput instanceof Promise) {
-    return resolveDocument(server, await documentInput)
-  }
-
-  if (typeof documentInput === 'string') {
-    const serverResult = await tryResolveServerDocument(server, documentInput)
-    if (serverResult?.resolved) {
-      return serverResult.resolved
-    }
-
-    const inlineSource = await tryLoadInlineSource(documentInput)
-    if (inlineSource) {
-      return parseAsyncAPISource(inlineSource.source, inlineSource.sourceName)
-    }
-
-    if (serverResult) {
-      const available = serverResult.availableKeys.length
-        ? `Available keys: ${serverResult.availableKeys.join(', ')}`
-        : 'No AsyncAPI schemas are currently loaded.'
-      throw new Error(`AsyncAPI document "${documentInput}" not found. ${available}`)
-    }
-
-    throw new Error(
-      `Unable to resolve AsyncAPI document from string input. Provide a registered key or inline AsyncAPI schema content.`
-    )
-  }
-
-  if (isProcessedDocument(documentInput)) {
-    return documentInput
-  }
-
-  if (isAsyncAPIDocumentLike(documentInput)) {
-    return processDocument(documentInput)
-  }
-
-  throw new Error('Unsupported AsyncAPI document type. Pass a key, schema string, AsyncAPIDocument, or processed document.')
-}
-
-interface ServerResolutionResult {
-  resolved?: ProcessedAsyncDocument
-  availableKeys: string[]
-}
-
-async function tryResolveServerDocument(
-  server: AsyncAPIServer,
-  key: string
-): Promise<ServerResolutionResult | undefined> {
-  if (!server || typeof server.getSchemas !== 'function') return undefined
-  try {
-    const schemas = await server.getSchemas()
-    return {
-      resolved: schemas[key],
-      availableKeys: Object.keys(schemas),
-    }
-  } catch {
-    return undefined
-  }
-}
-
-interface InlineSourceResult {
-  source: string
-  sourceName: string
-}
-
-async function tryLoadInlineSource(value: string): Promise<InlineSourceResult | undefined> {
-  const trimmed = value.trim()
-  if (!trimmed) return undefined
-
-  if (looksLikeInlineSpec(trimmed)) {
-    return { source: value, sourceName: 'inline-asyncapi' }
-  }
-
-  if (isLikelyUrl(trimmed) && typeof fetch === 'function') {
-    const response = await fetch(trimmed)
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch AsyncAPI document from "${trimmed}": ${response.status} ${response.statusText}`
-      )
-    }
-    return { source: await response.text(), sourceName: trimmed }
-  }
-
-  return undefined
-}
-
-const PARSER_CONFIGURATION = {
-  ruleset: {
-    core: false,
-    recommended: false,
-    extends: [],
-  },
-} as const
-
-let browserParserCtorPromise: Promise<typeof AsyncAPIParser> | null = null
-
-async function getBrowserParserCtor(): Promise<typeof AsyncAPIParser> {
-  if (!browserParserCtorPromise) {
-    browserParserCtorPromise = import('@asyncapi/parser/browser').then((mod) => {
-      const ctor = (mod as { default?: typeof AsyncAPIParser }).default ??
-        (mod as { Parser?: typeof AsyncAPIParser }).Parser
-      if (!ctor) {
-        throw new Error('AsyncAPI parser (browser) bundle did not expose a constructor.')
-      }
-      return ctor
-    })
-  }
-  return browserParserCtorPromise
-}
-
-async function parseAsyncAPISource(
-  source: string,
-  sourceName: string
-): Promise<ProcessedAsyncDocument> {
-  const ParserCtor = await getBrowserParserCtor()
-  const parser = new ParserCtor(PARSER_CONFIGURATION)
-  const { document, diagnostics } = await parser.parse(source, {
-    source: sourceName,
-    applyTraits: true,
-  })
-
-  const criticalDiagnostics = (diagnostics ?? []).filter((diag) => diag.severity === 0)
-  if (criticalDiagnostics.length > 0) {
-    const formatted = formatDiagnostics(criticalDiagnostics)
-    throw new Error(`Failed to parse AsyncAPI document "${sourceName}":\n${formatted}`)
-  }
-
-  if (!document) {
-    throw new Error(`AsyncAPI parser did not return a document for "${sourceName}".`)
-  }
-
-  return processDocument(document)
-}
-
-function formatDiagnostics(
-  diagnostics: Array<{ message: string; path?: Array<string | number> }>
-): string {
-  return diagnostics
-    .map((diag) => {
-      const path = diag.path?.length ? diag.path.map(String).join('.') : undefined
-      return `${diag.message}${path ? ` at ${path}` : ''}`
-    })
-    .join('\n')
-}
-
-function isProcessedDocument(value: unknown): value is ProcessedAsyncDocument {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    Array.isArray((value as ProcessedAsyncDocument).operations)
-  )
-}
-
-function isAsyncAPIDocumentLike(value: unknown): value is AsyncAPIDocument {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as AsyncAPIDocument).allChannels === 'function'
-  )
-}
-
-function looksLikeInlineSpec(value: string): boolean {
-  if (!value) return false
-  return value.startsWith('{') || value.startsWith('asyncapi:') || value.includes('\n')
-}
-
-function isLikelyUrl(value: string): boolean {
-  return value.startsWith('http://') || value.startsWith('https://')
-}
 
 function createRenderContext(processed: ProcessedAsyncDocument): AsyncRenderContext {
   return {
@@ -876,30 +758,6 @@ function formatMessageLabel(message: MessageInfo, index: number, total: number) 
   return 'Message'
 }
 
-function renderComponentsOverview(components?: AsyncComponents) {
-  if (!components) return null
-  const entries = Object.entries(components).filter(([, value]) => hasComponentEntries(value))
-  if (entries.length === 0) return null
-
-  return (
-    <section className="asyncapi-components flex flex-col gap-6" id="asyncapi-components">
-      <div className="space-y-2">
-        <h2 className="text-2xl font-semibold">Components</h2>
-        <p className="text-base text-muted-foreground">
-          Reusable schemas, messages, bindings, and traits shared across channels.
-        </p>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        {entries.map(([group, value]) => (
-          <SectionCard key={group} title={formatComponentTitle(group)}>
-            <ComponentEntries value={value} />
-          </SectionCard>
-        ))}
-      </div>
-    </section>
-  )
-}
-
 function SchemaFields({ entries }: { entries: SchemaFieldEntry[] }) {
   return (
     <div className="space-y-3">
@@ -927,53 +785,6 @@ function SchemaFields({ entries }: { entries: SchemaFieldEntry[] }) {
       ))}
     </div>
   )
-}
-
-function ComponentEntries({ value }: { value: unknown }) {
-  if (!value || typeof value !== 'object') {
-    return (
-      <pre className="overflow-auto rounded bg-muted/70 p-3 font-mono text-xs">
-        {formatJSON(value)}
-      </pre>
-    )
-  }
-
-  const record = value as Record<string, unknown>
-  const entries = Object.entries(record)
-  if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">No entries defined.</p>
-  }
-
-  return (
-    <div className="space-y-3">
-      {entries.map(([name, definition]) => (
-        <div key={name} className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {name}
-          </p>
-          <pre className="overflow-auto rounded bg-muted/70 p-3 font-mono text-xs">
-            {formatJSON(definition)}
-          </pre>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function hasComponentEntries(value: unknown): boolean {
-  if (value === null || value === undefined) return false
-  if (typeof value !== 'object') return true
-  return Object.keys(value as Record<string, unknown>).length > 0
-}
-
-function formatComponentTitle(key: string): string {
-  const spaced = key
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[-_]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!spaced) return 'Component'
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
 interface SchemaFieldEntry {
@@ -1101,8 +912,8 @@ function getSchemaDescription(schema: Record<string, unknown>): string | undefin
 function getOperationTitle(operation: OperationInfo) {
   if (operation.summary) return operation.summary
   if (operation.operationId) return operation.operationId
-  const action = operation.direction === 'publish' ? 'Publish' : 'Subscribe'
-  return `${action} ${operation.channel}`
+  const action = operation.direction === 'publish' ? 'Publish' : ''
+  return action ? `${action} ${operation.channel}` : operation.channel
 }
 
 function formatJSON(value: unknown) {

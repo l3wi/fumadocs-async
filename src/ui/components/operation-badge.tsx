@@ -14,11 +14,14 @@ const palette: Record<OperationBadgeProps['direction'], string> = {
 }
 
 export function OperationBadge({ direction, className }: OperationBadgeProps) {
-  const label = direction === 'publish' ? 'Publish' : 'Subscribe'
+  // Only show badge for publish operations, hide subscribe badges
+  if (direction === 'subscribe') {
+    return null
+  }
 
   return (
     <span className={[baseClasses, palette[direction], className].filter(Boolean).join(' ')}>
-      {label}
+      Publish
     </span>
   )
 }

@@ -201,8 +201,8 @@ function resolveGroupSlug(
 
 function getDefaultTitle(channel: ChannelInfo, operation?: OperationInfo): string {
   if (!operation) return channel.name
-  const action = operation.direction === 'publish' ? 'Publish' : 'Subscribe'
-  return `${action}: ${channel.name}`
+  const action = operation.direction === 'publish' ? 'Publish' : ''
+  return action ? `${action}: ${channel.name}` : channel.name
 }
 
 export function extractDocumentName(documentKey: string): string {
