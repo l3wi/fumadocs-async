@@ -17,12 +17,20 @@ import type {
   TagsInterface,
 } from '@asyncapi/parser'
 
+const processedCache = new WeakMap<AsyncAPIDocument, ProcessedAsyncDocument>()
+
 /**
  * Convert an AsyncAPI document into the shape used by the rest of the package.
+ * Results are memoized per document instance to keep server + inline parsing consistent.
  */
 export function processDocument(
   document: AsyncAPIDocument
 ): ProcessedAsyncDocument {
+  const cached = processedCache.get(document)
+  if (cached) {
+    return cached
+  }
+
   const channels: ChannelInfo[] = []
   const operations: OperationInfo[] = []
   const channelMap = new Map<string, ChannelInfo>()
@@ -76,13 +84,16 @@ export function processDocument(
 
   const components = mapComponents(document)
 
-  return {
+  const processed: ProcessedAsyncDocument = {
     document,
     channels,
     operations,
     servers,
     components,
   }
+
+  processedCache.set(document, processed)
+  return processed
 }
 
 function resolveChannelInfo(

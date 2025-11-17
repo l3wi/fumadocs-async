@@ -10,3 +10,5 @@ coverage
 .cache
 .temp
 .tmp
+.chunkhound/
+.claude/

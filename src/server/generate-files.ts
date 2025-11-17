@@ -9,8 +9,7 @@ import type {
 } from '../types'
 import {
   buildPageEntries,
-  extractDocumentName,
-  slugify,
+  reserveEntryPath,
   type AsyncPageEntry,
 } from './utils/page-context'
 
@@ -68,35 +67,13 @@ function buildEntriesForDocument(
   const usedPaths = new Set<string>()
 
   for (const ctx of pageEntries) {
-    const relativePath = createRelativePath(ctx, documentKey, usedPaths)
-    usedPaths.add(relativePath)
-
+    const relativePath = reserveEntryPath(ctx, usedPaths, { extension: '.mdx' })
     const absolutePath = path.join(outputDir, relativePath)
     const content = createPageContent(ctx, options)
     entries.push({ filePath: absolutePath, content })
   }
 
   return entries
-}
-
-function createRelativePath(
-  entry: AsyncPageEntry,
-  documentKey: string,
-  usedPaths: Set<string>
-): string {
-  const docSlug = slugify(extractDocumentName(documentKey))
-  const segments = [docSlug]
-  if (entry.groupSlug) segments.push(entry.groupSlug)
-
-  let slug = entry.slug || 'asyncapi'
-  let candidate = [...segments, slug].join('/')
-  let counter = 1
-  while (usedPaths.has(`${candidate}.mdx`)) {
-    slug = `${entry.slug}-${counter++}`
-    candidate = [...segments, slug].join('/')
-  }
-
-  return `${candidate}.mdx`
 }
 
 function createPageContent(

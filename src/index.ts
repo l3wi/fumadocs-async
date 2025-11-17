@@ -20,21 +20,18 @@ export type {
 } from './types'
 
 // WebSocket client exports
-export { 
-  WSClientProvider, 
-  WSPlayground, 
-  WSSidebar, 
-  useWSClient, 
-  useOptionalWSClient 
+export {
+  WSClientProvider,
+  WSSidebar,
+  useWSClient,
+  useOptionalWSClient,
 } from './components/ws-client'
-export type { 
-  WSPlaygroundProps,
-  WSPlaygroundState,
+export type {
   WSFetcher,
   WSConnectionOptions,
   WSSendOptions,
   WSMessage,
   WSConnectionState,
   ServerOption,
-  WSMessageEntry 
+  WSMessageEntry,
 } from './components/ws-client'

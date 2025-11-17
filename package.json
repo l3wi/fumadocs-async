@@ -1,6 +1,6 @@
 {
-  "name": "fumadocs-asyncapi",
-  "version": "0.1.0",
+  "name": "fumadocs-async",
+  "version": "0.1.1",
   "description": "AsyncAPI integration for Fumadocs - generate documentation pages from AsyncAPI specifications with WebSocket client support",
   "keywords": [
     "asyncapi",
@@ -12,16 +12,17 @@
     "nextjs",
     "react"
   ],
+  "homepage": "https://github.com/l3wi/fumadocs-async#readme",
+  "bugs": {
+    "url": "https://github.com/l3wi/fumadocs-async/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/fumadocs-asyncapi.git"
+    "url": "git+https://github.com/l3wi/fumadocs-async.git"
   },
   "license": "MIT",
-  "author": "Your Name <your.email@example.com>",
+  "author": "Lewi <lewis@blackwattle.ad>",
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -44,6 +45,12 @@
       "import": "./dist/next/index.js"
     },
     "./css/preset.css": "./dist/css/preset.css"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
   },
   "files": [
     "dist",
@@ -77,7 +84,7 @@
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "autoprefixer": "^10.4.0",
-    "@testing-library/react": "^15.0.0",
+    "@testing-library/react": "^16.0.0",
     "jsdom": "^24.0.0",
     "eslint": "^8.0.0",
     "eslint-config-prettier": "^9.0.0",
@@ -91,7 +98,7 @@
     "vitest": "^1.0.0"
   },
   "peerDependencies": {
-    "next": "^13.0.0 || ^14.0.0",
+    "next": "^13.0.0 || ^14.0.0 || ^16.0.0",
     "buffer": "^6.0.0"
   },
   "peerDependenciesMeta": {
@@ -104,5 +111,6 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "module": "./dist/index.js"
 }

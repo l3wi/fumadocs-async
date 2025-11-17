@@ -27,6 +27,7 @@ export interface AsyncPageEntry {
   slug: string
   groupSlug?: string
   tags?: string[]
+  pathSegments: string[]
 }
 
 export function buildPageEntries(
@@ -34,45 +35,14 @@ export function buildPageEntries(
   document: ProcessedAsyncDocument,
   options: AsyncSchemaToPagesOptions
 ): AsyncPageEntry[] {
-  const per = options.per ?? 'channel'
-  if (per === 'tag') {
-    return buildTagEntries(documentKey, document, options)
+  const mode = resolvePageMode(options.per)
+  const documentSlug = slugify(extractDocumentName(documentKey))
+
+  if (mode === 'tag') {
+    return buildTagEntries(documentKey, document, options, documentSlug)
   }
 
-  if (per !== 'channel' && per !== 'operation') {
-    throw new Error(
-      `Unsupported "per" option "${per}". Supported values are "channel", "operation", and "tag".`
-    )
-  }
-
-  const entries: AsyncPageEntry[] = []
-  for (const channel of document.channels) {
-    if (per === 'channel') {
-      entries.push(
-        createEntry({
-          documentKey,
-          document,
-          channel,
-          options,
-        })
-      )
-      continue
-    }
-
-    for (const operation of channel.operations) {
-      entries.push(
-        createEntry({
-          documentKey,
-          document,
-          channel,
-          operation,
-          options,
-        })
-      )
-    }
-  }
-
-  return entries
+  return buildChannelEntries(documentKey, document, options, mode, documentSlug)
 }
 
 function createEntry({
@@ -81,12 +51,14 @@ function createEntry({
   channel,
   operation,
   options,
+  documentSlug,
 }: {
   documentKey: string
   document: ProcessedAsyncDocument
   channel: ChannelInfo
   operation?: OperationInfo
   options: AsyncSchemaToPagesOptions
+  documentSlug: string
 }): AsyncPageEntry {
   const ctx: AsyncPageContext = { document, channel, operation }
   const title = options.name ? options.name(ctx) : getDefaultTitle(channel, operation)
@@ -95,6 +67,12 @@ function createEntry({
   const description = options.description
     ? options.description(ctx)
     : defaultDescription
+
+  const combinedTags = dedupeStrings([
+    ...(channel.tags ?? []),
+    ...(operation?.tags ?? []),
+  ])
+  const normalizedTags = combinedTags.length ? combinedTags : undefined
 
   const frontmatter: AsyncPageFrontmatter = {
     title,
@@ -105,9 +83,14 @@ function createEntry({
       channel: channel.name,
       direction: operation?.direction,
       operationId: operation?.operationId ?? operation?.id,
+      ...(normalizedTags ? { tags: normalizedTags } : {}),
     },
     ...(options.frontmatter ? options.frontmatter(ctx) : {}),
   }
+
+  const slug = resolveEntrySlug(channel, operation)
+  const groupSlug = resolveGroupSlug(channel, operation, options.groupBy)
+  const pathSegments = buildPathSegments(documentSlug, groupSlug, slug)
 
   return {
     document,
@@ -117,17 +100,18 @@ function createEntry({
     title,
     description,
     frontmatter,
-    slug: slugify(
-      operation ? `${channel.name}-${operation.direction}` : channel.name
-    ),
-    groupSlug: resolveGroupSlug(channel, operation, options.groupBy),
+    slug,
+    groupSlug,
+    tags: normalizedTags,
+    pathSegments,
   }
 }
 
 function buildTagEntries(
   documentKey: string,
   document: ProcessedAsyncDocument,
-  options: AsyncSchemaToPagesOptions
+  options: AsyncSchemaToPagesOptions,
+  documentSlug: string
 ): AsyncPageEntry[] {
   const tagSet = new Set<string>()
 
@@ -151,10 +135,16 @@ function buildTagEntries(
       document,
       channel: syntheticChannel,
       options,
+      documentSlug,
     })
 
     entry.tags = [tag]
-    const meta = entry.frontmatter._asyncapi ?? {}
+    entry.channel = undefined
+
+    const meta: AsyncPageFrontmatter['_asyncapi'] = entry.frontmatter._asyncapi ?? {
+      document: documentKey,
+    }
+    delete meta.channel
     meta.tags = entry.tags
     entry.frontmatter._asyncapi = meta
 
@@ -171,6 +161,46 @@ function createTagChannel(tag: string): ChannelInfo {
     tags: [tag],
     operations: [],
   }
+}
+
+function buildChannelEntries(
+  documentKey: string,
+  document: ProcessedAsyncDocument,
+  options: AsyncSchemaToPagesOptions,
+  mode: 'channel' | 'operation',
+  documentSlug: string
+): AsyncPageEntry[] {
+  const entries: AsyncPageEntry[] = []
+
+  for (const channel of document.channels) {
+    if (mode === 'channel') {
+      entries.push(
+        createEntry({
+          documentKey,
+          document,
+          channel,
+          options,
+          documentSlug,
+        })
+      )
+      continue
+    }
+
+    for (const operation of channel.operations) {
+      entries.push(
+        createEntry({
+          documentKey,
+          document,
+          channel,
+          operation,
+          options,
+          documentSlug,
+        })
+      )
+    }
+  }
+
+  return entries
 }
 
 function normalizeTagName(value?: string): string | undefined {
@@ -199,6 +229,46 @@ function resolveGroupSlug(
   return undefined
 }
 
+function buildPathSegments(
+  documentSlug: string,
+  groupSlug: string | undefined,
+  entrySlug: string
+): string[] {
+  const segments = [documentSlug]
+  if (groupSlug) segments.push(groupSlug)
+  segments.push(entrySlug || 'asyncapi')
+  return segments
+}
+
+function resolveEntrySlug(channel: ChannelInfo, operation?: OperationInfo): string {
+  if (!operation) {
+    return slugify(channel.name)
+  }
+
+  const operationHint =
+    operation.operationId ?? operation.id ?? operation.direction ?? 'operation'
+  return slugify(`${channel.name}-${operationHint}`)
+}
+
+function resolvePageMode(
+  mode: AsyncSchemaToPagesOptions['per']
+): 'channel' | 'operation' | 'tag' {
+  if (!mode) return 'channel'
+  if (mode === 'channel' || mode === 'operation' || mode === 'tag') {
+    return mode
+  }
+
+  throw new Error(
+    `Unsupported "per" option "${mode}". Supported values are "channel", "operation", and "tag".`
+  )
+}
+
+function dedupeStrings(values: string[]): string[] {
+  const filtered = values.map((value) => value?.trim()).filter(Boolean) as string[]
+  if (!filtered.length) return []
+  return Array.from(new Set(filtered))
+}
+
 function getDefaultTitle(channel: ChannelInfo, operation?: OperationInfo): string {
   if (!operation) return channel.name
   const action = operation.direction === 'publish' ? 'Publish' : ''
@@ -224,4 +294,34 @@ export function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
   return normalized || 'asyncapi'
+}
+
+export function reserveEntryPath(
+  entry: AsyncPageEntry,
+  usedPaths: Set<string>,
+  options: { extension?: string } = {}
+): string {
+  const extension = options.extension ?? ''
+  const uniquePath = ensureUniquePath(entry.pathSegments, usedPaths)
+  return `${uniquePath}${extension}`
+}
+
+function ensureUniquePath(
+  segments: string[],
+  usedPaths: Set<string>
+): string {
+  const baseSegments = [...segments]
+  const baseSlug = baseSegments[baseSegments.length - 1] ?? 'asyncapi'
+
+  let candidate = baseSegments.join('/')
+  let counter = 1
+
+  while (usedPaths.has(candidate)) {
+    const nextSlug = slugify(`${baseSlug}-${counter++}`)
+    const nextSegments = [...baseSegments.slice(0, -1), nextSlug]
+    candidate = nextSegments.join('/')
+  }
+
+  usedPaths.add(candidate)
+  return candidate
 }

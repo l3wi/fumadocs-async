@@ -8,8 +8,7 @@ import type {
 import { OperationBadge } from '../ui/components/operation-badge'
 import {
   buildPageEntries,
-  extractDocumentName,
-  slugify,
+  reserveEntryPath,
   type AsyncPageEntry,
 } from './utils/page-context'
 
@@ -94,7 +93,7 @@ export async function asyncapiSource(
     const usedPaths = new Set<string>()
 
     for (const entry of pageEntries) {
-      const relativePath = createVirtualPath(entry, key, usedPaths)
+      const relativePath = reserveEntryPath(entry, usedPaths)
       const pathWithBase = [normalizedBase, relativePath]
         .filter(Boolean)
         .join('/')
@@ -120,28 +119,6 @@ export async function asyncapiSource(
   return {
     files,
   }
-}
-
-function createVirtualPath(
-  entry: AsyncPageEntry,
-  documentKey: string,
-  usedPaths: Set<string>
-): string {
-  const docSlug = slugify(extractDocumentName(documentKey))
-  const segments = [docSlug]
-  if (entry.groupSlug) segments.push(entry.groupSlug)
-
-  let slug = entry.slug || 'asyncapi'
-  let candidate = [...segments, slug].join('/')
-  let counter = 1
-
-  while (usedPaths.has(candidate)) {
-    slug = `${entry.slug}-${counter++}`
-    candidate = [...segments, slug].join('/')
-  }
-
-  usedPaths.add(candidate)
-  return candidate
 }
 
 function normalizeBaseDir(value: string): string {

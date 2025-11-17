@@ -131,12 +131,17 @@ function matchesTags(
   operation: OperationInfo,
   filters: string[]
 ): boolean {
-  const tags = new Set([...(channel.tags ?? []), ...(operation.tags ?? [])])
-  if (tags.size === 0) {
+  const normalizedTags = new Set(
+    [...(channel.tags ?? []), ...(operation.tags ?? [])]
+      .map((tag) => tag?.trim().toLowerCase())
+      .filter(Boolean) as string[]
+  )
+
+  if (normalizedTags.size === 0) {
     return false
   }
 
-  return filters.some((filter) => tags.has(filter))
+  return filters.some((filter) => normalizedTags.has(filter))
 }
 
 function normalizeFilterArray(value: string | string[] | undefined): string[] {

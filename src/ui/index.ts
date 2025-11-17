@@ -16,4 +16,3 @@ export {
 } from '../utils/document'
 
 // Client components - these must be dynamically imported
-export type { WSPlaygroundProps, WSPlaygroundState } from '../components/ws-client/playground'
