@@ -22,6 +22,7 @@ export type {
 // WebSocket client exports
 export {
   WSClientProvider,
+  WSClientBoundary,
   WSSidebar,
   useWSClient,
   useOptionalWSClient,

@@ -107,6 +107,7 @@ function resolveChannelInfo(
 
   const info: ChannelInfo = {
     name,
+    address: channel.address() ?? undefined,
     description: channel.description() ?? undefined,
     tags: extractTagNamesFromJson(
       (channel.json() as { tags?: Array<{ name?: string }> }).tags

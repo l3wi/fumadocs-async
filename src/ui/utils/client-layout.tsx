@@ -3,7 +3,7 @@ import type {
   AsyncRenderContext,
 } from '../../types'
 import type { ReactNode } from 'react'
-import { WSClientProvider, WSSidebar } from '../../components/ws-client'
+import { WSClientBoundary, WSSidebar } from '../../components/ws-client'
 import type { ServerOption } from '../../components/ws-client'
 
 export async function renderClientSidebar(
@@ -33,7 +33,7 @@ export async function renderClientLayout(
   }
 
   return (
-    <div className="asyncapi-shell flex flex-col gap-8 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-10">
+    <div className="asyncapi-shell flex flex-col gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-6">
       <div className="asyncapi-shell-content min-w-0 flex-1">{content}</div>
       <aside className="asyncapi-shell-sidebar w-full xl:max-w-sm xl:justify-self-end xl:self-stretch">
         <div className="h-full">{sidebar}</div>
@@ -52,5 +52,5 @@ export async function renderClientProvider(
     return clientOptions.renderProvider({ children, ctx, servers })
   }
 
-  return <WSClientProvider>{children}</WSClientProvider>
+  return <WSClientBoundary>{children}</WSClientBoundary>
 }

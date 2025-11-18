@@ -15,6 +15,7 @@ export function createMessageTabData(
     parameters: extractParametersFromMessage(message),
     example,
     loadPayload: type === 'message' ? resolveDraftPayload(message, example) : undefined,
+    messageRef: message,
   }
 }
 

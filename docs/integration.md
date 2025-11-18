@@ -92,7 +92,27 @@ Use the `client` options to customise the WebSocket UI:
 - `servers` – provide a list or async factory for server targets.
 - `renderSidebar`, `renderLayout`, `renderProvider` – override any part of the default UI while keeping it scoped to the AsyncAPI page.
 
+> Tip: each page automatically provides a local `WSClientProvider`, but it only mounts when no ancestor provider is detected. Wrap your docs layout with `WSClientProvider` (exported from `fumadocs-asyncapi`) to keep the WebSocket connection alive across pages without touching the page configuration.
+
 Operations rendered by `<AsyncAPIPage />` automatically expose “Load into WebSocket client” buttons that push example payloads to the sidebar.
+
+### Persisting the WebSocket client across pages
+
+By default, every AsyncAPI page renders its own provider through a `WSClientBoundary`. If your host app renders multiple AsyncAPI pages (for example, different routes under `/docs/asyncapi/*`), wrap the entire surface with `WSClientProvider` so the sidebar keeps the same connection and message log while navigating.
+
+```tsx
+// app/docs/asyncapi/layout.tsx (Next.js App Router example)
+'use client'
+
+import type { ReactNode } from 'react'
+import { WSClientProvider } from 'fumadocs-asyncapi/client'
+
+export default function AsyncAPIDocsLayout({ children }: { children: ReactNode }) {
+  return <WSClientProvider>{children}</WSClientProvider>
+}
+```
+
+If you already have a provider higher in the tree (for example, to feed your own WebSocket UI), the boundary detects it and skips mounting a second provider, so both single-page and shared layouts work without extra configuration.
 
 ## 5. Tailwind preset (no global CSS overrides)
 

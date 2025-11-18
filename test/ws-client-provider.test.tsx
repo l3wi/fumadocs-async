@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, act, waitFor, cleanup } from '@testing-library/react'
-import { WSClientProvider, useWSClient } from '../src/components/ws-client/provider'
+import { WSClientProvider, WSClientBoundary, useWSClient } from '../src/components/ws-client/provider'
 import type { WSFetcher, WSConnectionOptions, WSSendOptions, WSMessage } from '../src/components/ws-client/fetcher'
 import type { WSClientContextValue } from '../src/components/ws-client/types'
 import { useEffect } from 'react'
@@ -148,5 +148,52 @@ describe('WSClientProvider', () => {
     })
 
     expect(latestClient!.error).toBe('Connect to a server before sending messages')
+  })
+})
+
+describe('WSClientBoundary', () => {
+  beforeEach(() => {
+    cleanup()
+    latestClient = null
+  })
+
+  it('creates a provider when no parent exists', async () => {
+    const fetcher = new StubFetcher()
+
+    render(
+      <WSClientBoundary fetcherFactory={async () => fetcher}>
+        <TestHarness />
+      </WSClientBoundary>
+    )
+
+    await waitFor(() => expect(latestClient).not.toBeNull())
+
+    await act(async () => {
+      latestClient!.connect('wss://example.com')
+    })
+
+    await waitFor(() => expect(fetcher.connectCalls).toBe(1))
+  })
+
+  it('reuses an ancestor provider if present', async () => {
+    const parentFetcher = new StubFetcher()
+    const fallbackFactory = vi.fn(async () => new StubFetcher())
+
+    render(
+      <WSClientProvider fetcherFactory={async () => parentFetcher}>
+        <WSClientBoundary fetcherFactory={fallbackFactory}>
+          <TestHarness />
+        </WSClientBoundary>
+      </WSClientProvider>
+    )
+
+    await waitFor(() => expect(latestClient).not.toBeNull())
+
+    await act(async () => {
+      latestClient!.connect('wss://example.com')
+    })
+
+    await waitFor(() => expect(parentFetcher.connectCalls).toBe(1))
+    expect(fallbackFactory).not.toHaveBeenCalled()
   })
 })

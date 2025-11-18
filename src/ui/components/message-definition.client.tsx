@@ -2,21 +2,45 @@
 
 import type { OperationTabData } from './operation-card.types'
 import { useOptionalWSClient } from '../../components/ws-client'
+import { useMessagePayloadTransformer } from '../state/message-payload-transformer'
+import { runDraftPayloadTransformer } from '../utils/payload-transformer'
 
 interface MessageDefinitionProps {
   tab: OperationTabData
   channelName?: string
   allowLoad?: boolean
+  operationId?: string
+  operationName?: string
+  operationDirection?: 'publish' | 'subscribe'
 }
 
-export function MessageDefinitionPanel({ tab, channelName, allowLoad }: MessageDefinitionProps) {
+export function MessageDefinitionPanel({
+  tab,
+  channelName,
+  allowLoad,
+  operationDirection,
+  operationId,
+  operationName,
+}: MessageDefinitionProps) {
   const client = useOptionalWSClient()
+  const payloadTransformer = useMessagePayloadTransformer()
   const exampleString = formatJSON(tab.example ?? {})
 
-  const handleLoad = () => {
+  const handleLoad = async () => {
     if (!allowLoad || !client || tab.type !== 'message') return
     const payload = tab.loadPayload ?? tab.example ?? {}
-    client.pushDraft({ channel: channelName, payload })
+    const meta = {
+      source: 'message-definition' as const,
+      channelName,
+      operationId,
+      operationName,
+      operationDirection,
+      tabKey: tab.key,
+      tabName: tab.name,
+      tabType: tab.type,
+    }
+    const resolvedPayload = await runDraftPayloadTransformer(payloadTransformer, payload, meta)
+    client.pushDraft({ channel: channelName, payload: resolvedPayload })
   }
 
   const handleCopy = async () => {

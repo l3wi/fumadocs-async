@@ -18,12 +18,13 @@ export function buildOperationCardRenderData(
   operation: OperationInfo,
   options: OperationCardBuilderOptions = {}
 ): OperationCardRenderData {
+  const id = resolveOperationId(channel, operation)
   const tags = Array.from(
     new Set([...(channel.tags ?? []), ...(operation.tags ?? [])])
   )
 
   return {
-    id: operation.operationId ?? operation.id ?? channel.name,
+    id,
     title: getOperationTitle(operation),
     summary: operation.summary,
     description: operation.description ?? channel.description,
@@ -60,4 +61,11 @@ export function getOperationTitle(operation: OperationInfo): string {
     operation.id ||
     `Operation (${operation.direction})`
   )
+}
+
+function resolveOperationId(channel: ChannelInfo, operation: OperationInfo): string {
+  if (operation.operationId) return operation.operationId
+  if (operation.id) return operation.id
+  // Direction ensures each channel's publish/subscribe operations get distinct anchors.
+  return `${channel.name}-${operation.direction}`
 }

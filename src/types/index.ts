@@ -33,6 +33,7 @@ export interface ProcessedAsyncDocument {
 
 export interface ChannelInfo {
   name: string
+  address?: string
   description?: string
   tags?: string[]
   operations: OperationInfo[]

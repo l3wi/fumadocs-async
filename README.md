@@ -7,7 +7,7 @@ AsyncAPI integration for Fumadocs – parse specs once, generate docs, and embed
 - **Server & Parser** – `createAsyncAPI` loads one or more AsyncAPI YAML/JSON files (or live documents), caches the parsed result, and exposes a uniform `AsyncAPIServer` for the rest of the package.
 - **Page Generation** – `generateAsyncFiles` + `asyncapiSource` turn AsyncAPI operations into MDX files or virtual Fumadocs pages. Group pages per channel, per operation, or per tag, and customize frontmatter/imports before writing.
 - **UI Components** – `createAsyncAPIPage` renders channels, operations, message schemas, examples, bindings, and code samples. Slots mirror `fumadocs-openapi`, so you can override layouts or inject custom schema renderers and playgrounds.
-- **WebSocket Sidebar** – A built-in client (`WSClientProvider` + `<WSSidebar />`) lets readers connect to AsyncAPI servers, push example payloads from docs into the sidebar, and inspect live traffic.
+- **WebSocket Sidebar** – A built-in client (`WSClientProvider`, `WSClientBoundary`, and `<WSSidebar />`) lets readers connect to AsyncAPI servers, push example payloads from docs into the sidebar, and inspect live traffic.
 - **Next.js Helpers** – `AsyncAPIChannelsPage` and `AsyncAPIMessagesPage` give App Router projects prebuilt channel/message lists that stay in sync with the core UI utilities.
 
 ## Installation
@@ -75,6 +75,65 @@ bun add fumadocs-asyncapi
    ```
 
    Then render `<AsyncAPIPage document="orders" />` in MDX or use the Source plugin.
+
+### Persisting the WebSocket client
+
+AsyncAPI pages automatically wrap their content with a `WSClientBoundary`. It instantiates a `WSClientProvider` only when no ancestor provider is available, which means you can opt into cross-page persistence by placing a provider higher in your tree without breaking single pages.
+
+```tsx
+// app/docs/asyncapi/layout.tsx (Next.js)
+'use client'
+
+import type { ReactNode } from 'react'
+import { WSClientProvider } from 'fumadocs-asyncapi/client'
+
+export default function AsyncAPIDocsLayout({ children }: { children: ReactNode }) {
+  return <WSClientProvider>{children}</WSClientProvider>
+}
+```
+
+With this layout in place, navigating between different AsyncAPI routes keeps the same WebSocket connection, draft payload, and activity log alive.
+
+### Injecting runtime payload data
+
+When your docs site already knows sensitive values (such as a reader's bearer token), you can intercept every "Load" action and dynamically edit the payload before it reaches the WebSocket client. Use the `setMessagePayloadTransformer` helper exported from `fumadocs-asyncapi/client`.
+
+```tsx
+'use client'
+
+import { useEffect } from 'react'
+import {
+  clearMessagePayloadTransformer,
+  setMessagePayloadTransformer,
+  type DraftPayloadTransformMeta,
+} from 'fumadocs-asyncapi/client'
+
+export function AsyncAPITokenBridge({ bearerToken }: { bearerToken?: string }) {
+  useEffect(() => {
+    if (!bearerToken) return
+
+    setMessagePayloadTransformer((payload, meta) => {
+      if (!payload || typeof payload !== 'object') return payload
+
+      // Only touch payloads that already expose the "bearer" field we care about.
+      if (!('bearer' in payload) && !('bearerToken' in payload)) {
+        return payload
+      }
+
+      const next = { ...payload } as Record<string, unknown>
+      if ('bearer' in payload) next.bearer = bearerToken
+      if ('bearerToken' in payload) next.bearerToken = bearerToken
+      return next
+    })
+
+    return () => clearMessagePayloadTransformer()
+  }, [bearerToken])
+
+  return null
+}
+```
+
+The transformer receives the payload plus metadata describing which operation/tab triggered the load (`meta: DraftPayloadTransformMeta`). From here you can branch on the operation ID, channel, or any other field to decide when to inject data. Returning `undefined` or the original payload leaves the sample untouched.
 
 ## Development
 

@@ -21,7 +21,33 @@ const INITIAL_DRAFT: WSClientDraft = {
   payloadText: '{}',
 }
 
-const WSClientContext = createContext<WSClientContextValue | null>(null)
+const WSClientContext = getOrCreateWSClientContext()
+
+type WSContextInstance = ReturnType<typeof createContext<WSClientContextValue | null>>
+
+function getOrCreateWSClientContext(): WSContextInstance {
+  const globalRef = getGlobalObject()
+  const contextKey = Symbol.for('fumadocs-asyncapi.ws-client-context')
+
+  if (globalRef) {
+    const existing = globalRef[contextKey]
+    if (existing) {
+      return existing as WSContextInstance
+    }
+    const created: WSContextInstance = createContext<WSClientContextValue | null>(null)
+    globalRef[contextKey] = created
+    return created
+  }
+
+  return createContext<WSClientContextValue | null>(null)
+}
+
+function getGlobalObject(): Record<PropertyKey, unknown> | null {
+  if (typeof globalThis !== 'undefined') {
+    return globalThis as Record<PropertyKey, unknown>
+  }
+  return null
+}
 
 interface WSClientProviderProps {
   children: ReactNode
@@ -189,6 +215,23 @@ export function WSClientProvider({
     <WSClientContext.Provider value={value}>
       {children}
     </WSClientContext.Provider>
+  )
+}
+
+interface WSClientBoundaryProps extends Partial<Omit<WSClientProviderProps, 'children'>> {
+  children: ReactNode
+}
+
+export function WSClientBoundary({ children, fetcherFactory }: WSClientBoundaryProps) {
+  const parentClient = useContext(WSClientContext)
+  if (parentClient) {
+    return <>{children}</>
+  }
+
+  return (
+    <WSClientProvider fetcherFactory={fetcherFactory}>
+      {children}
+    </WSClientProvider>
   )
 }
 

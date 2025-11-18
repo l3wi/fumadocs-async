@@ -12,13 +12,14 @@ import type { ServerOption } from '../components/ws-client/types'
 import { buildOperationCardRenderData } from '../ui/utils/operation-card'
 import { resolveClientServers } from '../ui/utils/ws-client'
 
-type AsyncAPIMessagesClientComponent = typeof import('./asyncapi-messages.client').AsyncAPIMessagesClient
+type AsyncAPIMessagesClientComponent = typeof import('../client').AsyncAPIMessagesClient
 
 let cachedMessagesClient: AsyncAPIMessagesClientComponent | null = null
 
 async function getAsyncAPIMessagesClient(): Promise<AsyncAPIMessagesClientComponent> {
   if (!cachedMessagesClient) {
-    cachedMessagesClient = (await import('./asyncapi-messages.client')).AsyncAPIMessagesClient
+    const { AsyncAPIMessagesClient } = await import('../client')
+    cachedMessagesClient = AsyncAPIMessagesClient
   }
   return cachedMessagesClient
 }

@@ -25,9 +25,9 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
   } = useWSClient()
 
   const [selectedServer, setSelectedServer] = useState<string>(
-    servers[0]?.url ?? url ?? ''
+    servers[0]?.url ?? ''
   )
-  const [customUrl, setCustomUrl] = useState<string>(servers[0]?.url ?? url ?? '')
+  const [customUrl, setCustomUrl] = useState<string>(url ?? '')
 
   const currentServerName = useMemo(
     () =>
@@ -42,6 +42,8 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
   }
 
   const statusLabel = connected ? 'Connected' : 'Disconnected'
+  const activeUrl = url ?? customUrl ?? selectedServer ?? ''
+  const showUrlInput = servers.length === 0 || selectedServer === ''
 
   return (
     <aside className="asyncapi-sidebar h-full text-sm">
@@ -61,51 +63,67 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
             </span>
           </div>
 
-          {servers.length > 0 && (
-            <label className="mt-4 flex flex-col gap-1">
+          {connected ? (
+            <div className="mt-4 flex flex-col gap-0">
               <span className="text-xs font-medium text-muted-foreground">Server</span>
-              <select
-                className="rounded-lg border border-border bg-background px-2 py-1"
-                value={selectedServer}
-                onChange={(event) => {
-                  const value = event.target.value
-                  setSelectedServer(value)
-                  setCustomUrl(value)
-                }}
+              <p className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground break-all">
+                {activeUrl || 'Unknown'}
+              </p>
+              <button
+                type="button"
+                className="w-full rounded-lg border border-border/70 bg-background px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-muted"
+                onClick={disconnect}
               >
-                {servers.map((server) => (
-                  <option key={server.name} value={server.url}>
-                    {server.name}
-                  </option>
-                ))}
-                <option value="">Custom</option>
-              </select>
-            </label>
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <>
+              {servers.length > 0 && (
+                <label className="mt-4 flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted-foreground">Server</span>
+                  <select
+                    className="rounded-lg border border-border bg-background px-2 py-1"
+                    value={selectedServer}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      setSelectedServer(value)
+                      if (value) {
+                        setCustomUrl(value)
+                      }
+                    }}
+                  >
+                    {servers.map((server) => (
+                      <option key={server.name} value={server.url}>
+                        {server.name}
+                      </option>
+                    ))}
+                    <option value="">Custom</option>
+                  </select>
+                </label>
+              )}
+
+              {showUrlInput && (
+                <label className="mt-4 flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted-foreground">WebSocket URL</span>
+                  <input
+                    className="rounded-lg border border-border bg-background px-2 py-1"
+                    value={customUrl}
+                    onChange={(event) => setCustomUrl(event.target.value)}
+                    placeholder="wss://example.com/socket"
+                  />
+                </label>
+              )}
+
+              <button
+                type="button"
+                className="mt-4 w-full rounded-lg border border-border/70 bg-background px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-muted"
+                onClick={handleConnect}
+              >
+                Connect
+              </button>
+            </>
           )}
-
-          <label className="mt-4 flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">WebSocket URL</span>
-            <input
-              className="rounded-lg border border-border bg-background px-2 py-1"
-              value={customUrl}
-              onChange={(event) => setCustomUrl(event.target.value)}
-              placeholder="wss://example.com/socket"
-            />
-          </label>
-
-          <button
-            type="button"
-            className="mt-4 w-full rounded-lg border border-border/70 bg-background px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-muted"
-            onClick={() => {
-              if (connected) {
-                disconnect()
-              } else {
-                handleConnect()
-              }
-            }}
-          >
-            {connected ? 'Disconnect' : 'Connect'}
-          </button>
         </section>
 
         <section

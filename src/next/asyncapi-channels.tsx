@@ -53,6 +53,12 @@ export async function AsyncAPIChannelsPage({
           </div>
 
           <div className="space-y-3">
+            {channel.address && (
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Address:
+                <code className="ml-2 font-mono text-sm text-foreground">{channel.address}</code>
+              </p>
+            )}
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Operations
             </h3>
@@ -119,12 +125,6 @@ function OperationListCard({
         {operation.description && (
           <p className="text-sm text-muted-foreground">{operation.description}</p>
         )}
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Address:
-          <code className="ml-2 font-mono text-sm text-foreground">
-            {operation.channel ?? channel.name}
-          </code>
-        </p>
       </div>
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
