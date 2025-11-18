@@ -133,7 +133,7 @@ export function AsyncAPITokenBridge({ bearerToken }: { bearerToken?: string }) {
 }
 ```
 
-The transformer receives the payload plus metadata describing which operation/tab triggered the load (`meta: DraftPayloadTransformMeta`). From here you can branch on the operation ID, channel, or any other field to decide when to inject data. Returning `undefined` or the original payload leaves the sample untouched.
+The transformer receives the payload plus metadata describing which operation/message triggered the load (`meta: DraftPayloadTransformMeta`). From here you can branch on the operation ID, channel, or any other field to decide when to inject data. Returning `undefined` or the original payload leaves the sample untouched.
 
 ## Development
 

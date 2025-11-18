@@ -1,11 +1,11 @@
 import type { MessageInfo } from '../../types'
-import type { OperationParameterData, OperationTabData } from '../components/operation-card.types'
+import type { OperationParameterData, OperationMessageData } from '../components/operation-card.types'
 
-export function createMessageTabData(
+export function createOperationMessageData(
   message: MessageInfo,
-  type: OperationTabData['type'],
+  type: OperationMessageData['type'],
   index: number
-): OperationTabData {
+): OperationMessageData {
   const example = resolveMessageExample(message)
   return {
     key: `${type}-${message.name ?? message.title ?? index}`,
@@ -19,7 +19,7 @@ export function createMessageTabData(
   }
 }
 
-function defaultTabLabel(type: OperationTabData['type'], index: number): string {
+function defaultTabLabel(type: OperationMessageData['type'], index: number): string {
   const ordinal = index + 1
   return type === 'message' ? `Message ${ordinal}` : `Reply ${ordinal}`
 }

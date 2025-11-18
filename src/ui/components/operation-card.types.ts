@@ -7,7 +7,7 @@ export interface OperationParameterData {
   description?: string
 }
 
-export interface OperationTabData {
+export interface OperationMessageData {
   key: string
   name: string
   type: 'message' | 'reply'
@@ -27,5 +27,6 @@ export interface OperationCardRenderData {
   direction: 'publish' | 'subscribe'
   channelName: string
   channelHref?: string
-  tabs: OperationTabData[]
+  messages: OperationMessageData[]
+  replies: OperationMessageData[]
 }

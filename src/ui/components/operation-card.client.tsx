@@ -1,38 +1,40 @@
 'use client'
 
 import type { OperationCardRenderData } from './operation-card.types'
-import type { OperationTabData } from './operation-card.types'
 import { ChannelTag } from './channel-tag'
-import { useOptionalWSClient } from '../../components/ws-client'
-import type { WSClientContextValue } from '../../components/ws-client/types'
-import { useMessagePayloadTransformer } from '../state/message-payload-transformer'
-import type { DraftPayloadTransformer } from '../state/message-payload-transformer'
-import { runDraftPayloadTransformer } from '../utils/payload-transformer'
+import { getOperationAnchorId } from '../../utils/anchors'
+import { MessageDefinitionPanel } from './message-definition.client'
 
 interface OperationCardProps {
   operation: OperationCardRenderData
+  anchorId?: string
 }
 
-export function OperationCard({ operation }: OperationCardProps) {
-  const tabs = operation.tabs
-  const wsClient = useOptionalWSClient()
-  const payloadTransformer = useMessagePayloadTransformer()
+export function OperationCard({ operation, anchorId }: OperationCardProps) {
+  const messageEntries = [...operation.messages, ...operation.replies]
 
-  if (!tabs.length) {
+  if (!messageEntries.length) {
     return null
   }
 
-  // Group tabs by type
-  const messages = tabs.filter((tab) => tab.type === 'message')
-  const replies = tabs.filter((tab) => tab.type === 'reply')
-  
+  const cardAnchorId =
+    anchorId ??
+    getOperationAnchorId({
+      operationId: operation.id,
+      title: operation.title,
+      channelName: operation.channelName,
+    })
+
   const filteredTags = operation.tags.filter((tag) => {
     const normalized = tag.toLowerCase()
     return normalized !== 'subscribe' && normalized !== 'publish'
   })
 
   return (
-    <div className="space-y-5 rounded-2xl border border-border/60 bg-card/50 p-6 text-sm shadow-sm">
+    <div
+      id={cardAnchorId}
+      className="space-y-5 rounded-2xl border border-border/60 bg-card/50 p-6 text-sm shadow-sm"
+    >
       <header className="space-y-3">
         {operation.direction === 'publish' && (
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -42,13 +44,32 @@ export function OperationCard({ operation }: OperationCardProps) {
           </div>
         )}
         <div className="space-y-1">
-          <h3 className="text-xl font-semibold leading-tight">{operation.title}</h3>
-          {operation.description && <p className="text-sm text-muted-foreground">{operation.description}</p>}
+          <h3 className="text-xl font-semibold leading-tight not-prose">
+            {cardAnchorId ? (
+              <a
+                href={`#${cardAnchorId}`}
+                className="group inline-flex items-center gap-2 text-foreground no-underline transition hover:text-primary"
+              >
+                {operation.title}
+                <span className="text-muted-foreground opacity-0 transition group-hover:opacity-100">
+                  #
+                </span>
+              </a>
+            ) : (
+              operation.title
+            )}
+          </h3>
+          {operation.description && (
+            <p className="text-sm text-muted-foreground">{operation.description}</p>
+          )}
         </div>
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <span className="font-semibold uppercase tracking-wide">Channel:</span>
-            <ChannelTag channelName={operation.channelName} href={operation.channelHref || `#channel-${operation.channelName}`} />
+            <ChannelTag
+              channelName={operation.channelName}
+              href={operation.channelHref || `#channel-${operation.channelName}`}
+            />
           </div>
           {filteredTags.length > 0 && (
             <div className="flex items-center gap-2">
@@ -57,7 +78,10 @@ export function OperationCard({ operation }: OperationCardProps) {
               </span>
               <div className="flex flex-wrap gap-2">
                 {filteredTags.map((tag) => (
-                  <span key={tag} className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  <span
+                    key={tag}
+                    className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                  >
                     {tag}
                   </span>
                 ))}
@@ -67,166 +91,23 @@ export function OperationCard({ operation }: OperationCardProps) {
         </div>
       </header>
 
-      <div className="space-y-6">
-        <MessageGroup
-          title="Messages"
-          tabs={messages}
-          channelName={operation.channelName}
-          wsClient={wsClient}
-          payloadTransformer={payloadTransformer}
-          operation={operation}
-        />
-        <MessageGroup
-          title="Replies"
-          tabs={replies}
-          channelName={operation.channelName}
-          wsClient={wsClient}
-          payloadTransformer={payloadTransformer}
-          operation={operation}
-        />
-      </div>
-    </div>
-  )
-}
-
-function MessageGroup({
-  title,
-  tabs,
-  channelName,
-  wsClient,
-  payloadTransformer,
-  operation,
-}: {
-  title: string
-  tabs: OperationTabData[]
-  channelName: string
-  wsClient: WSClientContextValue | null
-  payloadTransformer: DraftPayloadTransformer | null
-  operation: OperationCardRenderData
-}) {
-  if (tabs.length === 0) {
-    return (
-      <div className="space-y-2 text-sm text-muted-foreground">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground/80">{title}</h3>
-        <p>No {title.toLowerCase()} defined.</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground/80">{title}</h3>
       <div className="space-y-4">
-        {tabs.map((tab) => {
-          const exampleString = formatJSON(tab.example ?? {})
-
-          const handleCopy = async () => {
-            try {
-              await navigator.clipboard.writeText(exampleString)
-            } catch {
-              // ignore
-            }
-          }
-
-          const handleLoad = async () => {
-            if (!wsClient || tab.type !== 'message') return
-            const payload = tab.loadPayload ?? tab.example ?? {}
-            const meta = {
-              source: 'operation-card' as const,
-              channelName,
-              operationId: operation.id,
-              operationName: operation.title,
-              operationDirection: operation.direction,
-              tabKey: tab.key,
-              tabName: tab.name,
-              tabType: tab.type,
-            }
-            const resolvedPayload = await runDraftPayloadTransformer(
-              payloadTransformer,
-              payload,
-              meta
-            )
-            wsClient.pushDraft({ channel: channelName, payload: resolvedPayload })
-          }
-
+        {messageEntries.map((message) => {
+          const messageAnchorId = cardAnchorId ? `${cardAnchorId}-${message.key}` : undefined
           return (
-            <div key={tab.key} className="space-y-4 rounded-lg border border-border/60 bg-card/50 p-4 text-sm">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold">{tab.name}</p>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                      tab.type === 'message'
-                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                        : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                    }`}
-                  >
-                    {tab.type === 'message' ? 'MESSAGE' : 'REPLY'}
-                  </span>
-                </div>
-                {tab.description && <p className="text-sm text-muted-foreground">{tab.description}</p>}
-              </div>
-
-              {tab.parameters.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Parameters</p>
-                  <div className="space-y-3">
-                    {tab.parameters.map((param) => (
-                      <div key={param.name} className="space-y-1">
-                        <div className="flex items-baseline gap-2">
-                          <code className="font-mono text-sm text-foreground">
-                            {param.name}
-                            {!param.required && '?'}
-                          </code>
-                          {param.type && (
-                            <span className="text-xs font-mono text-muted-foreground">{param.type}</span>
-                          )}
-                        </div>
-                        {param.description && (
-                          <p className="text-sm text-muted-foreground">{param.description}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="relative">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Payload</p>
-                <pre className="max-h-[360px] overflow-auto rounded-xl bg-muted/60 p-4 text-xs">
-                  <code>{exampleString}</code>
-                </pre>
-                <div className="absolute top-3 right-3 flex gap-2">
-                  {wsClient && tab.type === 'message' && (
-                    <button
-                      type="button"
-                      onClick={handleLoad}
-                      className="h-7 rounded-md border border-border/70 bg-background/80 px-2 text-[11px] font-medium text-foreground shadow-sm transition hover:bg-muted"
-                    >
-                      Load into Tester
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="h-7 rounded-md border border-border/70 bg-background/80 px-2 text-[11px] font-medium text-foreground shadow-sm transition hover:bg-muted"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            </div>
+            <MessageDefinitionPanel
+              key={message.key}
+              message={message}
+              channelName={operation.channelName}
+              operationId={operation.id}
+              operationName={operation.title}
+              operationDirection={operation.direction}
+              anchorId={messageAnchorId}
+              allowLoad={message.type === 'message'}
+            />
           )
         })}
       </div>
     </div>
   )
-}
-
-function formatJSON(value: unknown) {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
 }

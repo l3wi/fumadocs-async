@@ -13,9 +13,9 @@ export interface DraftPayloadTransformMeta {
   operationId?: string
   operationName?: string
   operationDirection?: 'publish' | 'subscribe'
-  tabKey?: string
-  tabName?: string
-  tabType?: 'message' | 'reply'
+  messageKey?: string
+  messageName?: string
+  messageType?: 'message' | 'reply'
 }
 
 export type DraftPayloadTransformer = (

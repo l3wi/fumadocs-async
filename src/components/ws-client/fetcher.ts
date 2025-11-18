@@ -14,9 +14,12 @@ export interface WSMessage {
   direction: 'in' | 'out';
 }
 
+export type WSErrorType = 'connection' | 'message';
+
 export interface WSConnectionState {
   connected: boolean;
   error?: string;
+  errorType?: WSErrorType;
 }
 
 export interface WSFetcher {
@@ -64,7 +67,7 @@ export function createWebSocketFetcher(): WSFetcher {
   return {
     async connect(options) {
       if (!options.url) {
-        updateState({ error: 'WebSocket URL is required' });
+        updateState({ error: 'WebSocket URL is required', errorType: 'connection' });
         return;
       }
 
@@ -72,24 +75,25 @@ export function createWebSocketFetcher(): WSFetcher {
 
       try {
         socket = new WebSocket(options.url, options.protocols);
-        updateState({ connected: false, error: undefined });
+        updateState({ connected: false, error: undefined, errorType: undefined });
 
         socket.addEventListener('open', () => {
-          updateState({ connected: true, error: undefined });
+          updateState({ connected: true, error: undefined, errorType: undefined });
         });
 
         socket.addEventListener('close', () => {
-          updateState({ connected: false });
+          updateState({ connected: false, error: undefined, errorType: undefined });
         });
 
         socket.addEventListener('error', () => {
-          updateState({ error: 'Failed to connect to server' });
+          updateState({ error: 'Failed to connect to server', errorType: 'connection' });
         });
 
         socket.addEventListener('message', handleMessage);
       } catch (error) {
         updateState({ 
-          error: error instanceof Error ? error.message : 'Connection error' 
+          error: error instanceof Error ? error.message : 'Connection error',
+          errorType: 'connection',
         });
       }
     },
@@ -99,17 +103,17 @@ export function createWebSocketFetcher(): WSFetcher {
         socket.close();
         socket = null;
       }
-      updateState({ connected: false });
+      updateState({ connected: false, error: undefined, errorType: undefined });
     },
 
     async send(options) {
       if (!socket || socket.readyState !== WebSocket.OPEN) {
-        updateState({ error: 'Connect to a server before sending messages' });
+        updateState({ error: 'Connect to a server before sending messages', errorType: 'message' });
         return;
       }
 
       if (!options.data?.trim()) {
-        updateState({ error: 'Payload cannot be empty' });
+        updateState({ error: 'Payload cannot be empty', errorType: 'message' });
         return;
       }
 
@@ -130,10 +134,11 @@ export function createWebSocketFetcher(): WSFetcher {
         };
 
         messageCallback?.(message);
-        updateState({ error: undefined });
+        updateState({ error: undefined, errorType: undefined });
       } catch (error) {
         updateState({ 
-          error: error instanceof Error ? error.message : 'Failed to send message' 
+          error: error instanceof Error ? error.message : 'Failed to send message',
+          errorType: 'message',
         });
       }
     },

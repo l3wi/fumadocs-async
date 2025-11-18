@@ -6,6 +6,13 @@ export interface WSMessageEntry {
   timestamp: number
 }
 
+export interface WSConnectionError {
+  message: string
+  at: number
+}
+
+export type WSClientErrorSource = 'manual' | 'fetcher'
+
 export interface WSClientDraft {
   channel?: string
   payloadText: string
@@ -18,6 +25,8 @@ export interface WSClientState {
   messages: WSMessageEntry[]
   draft: WSClientDraft
   error?: string
+  errorSource?: WSClientErrorSource
+  connectionError?: WSConnectionError
 }
 
 export interface WSClientContextValue extends WSClientState {

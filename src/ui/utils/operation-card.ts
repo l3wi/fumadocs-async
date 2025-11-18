@@ -5,9 +5,9 @@ import type {
 } from '../../types'
 import type {
   OperationCardRenderData,
-  OperationTabData,
+  OperationMessageData,
 } from '../components/operation-card.types'
-import { createMessageTabData } from './message-tab'
+import { createOperationMessageData } from './message-tab'
 
 export interface OperationCardBuilderOptions {
   channelHref?: AsyncCreatePageOptions['channelHref']
@@ -34,24 +34,23 @@ export function buildOperationCardRenderData(
     channelHref: options.channelHref
       ? options.channelHref(channel, operation)
       : undefined,
-    tabs: buildOperationTabs(operation),
+    messages: buildOperationMessages(operation),
+    replies: buildOperationReplies(operation),
   }
 }
 
-export function buildOperationTabs(operation: OperationInfo): OperationTabData[] {
-  const tabs: OperationTabData[] = []
-
+function buildOperationMessages(operation: OperationInfo): OperationMessageData[] {
   const messages = operation.messages ?? []
-  messages.forEach((message, index) => {
-    tabs.push(createMessageTabData(message, 'message', index))
-  })
+  return messages.map((message, index) =>
+    createOperationMessageData(message, 'message', index)
+  )
+}
 
+function buildOperationReplies(operation: OperationInfo): OperationMessageData[] {
   const replies = operation.reply?.messages ?? []
-  replies.forEach((message, index) => {
-    tabs.push(createMessageTabData(message, 'reply', index))
-  })
-
-  return tabs
+  return replies.map((message, index) =>
+    createOperationMessageData(message, 'reply', index)
+  )
 }
 
 export function getOperationTitle(operation: OperationInfo): string {

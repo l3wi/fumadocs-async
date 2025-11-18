@@ -67,6 +67,8 @@ export function WSClientProvider({
     connected: false,
     messages: [],
     draft: INITIAL_DRAFT,
+    errorSource: undefined,
+    connectionError: undefined,
   })
 
   const connectQuery = useQuery(async (url: string) => {
@@ -88,11 +90,37 @@ export function WSClientProvider({
     })
 
     fetcher.onStateChange((connectionState: WSConnectionState) => {
-      setState((prev) => ({
-        ...prev,
-        connected: connectionState.connected,
-        error: connectionState.error,
-      }))
+      setState((prev) => {
+        const isConnectionError =
+          Boolean(connectionState.error) && connectionState.errorType === 'connection'
+        const isMessageError =
+          Boolean(connectionState.error) && connectionState.errorType === 'message'
+        const hasNoError = !connectionState.error
+
+        const nextState = {
+          ...prev,
+          connected: connectionState.connected,
+        }
+
+        if (isConnectionError && connectionState.error) {
+          nextState.connectionError = {
+            message: connectionState.error,
+            at: Date.now(),
+          }
+        } else if (connectionState.connected) {
+          nextState.connectionError = undefined
+        }
+
+        if (isMessageError && connectionState.error) {
+          nextState.error = connectionState.error
+          nextState.errorSource = 'fetcher'
+        } else if (hasNoError && prev.errorSource === 'fetcher') {
+          nextState.error = undefined
+          nextState.errorSource = undefined
+        }
+
+        return nextState
+      })
     })
 
     await fetcher.connect({ url })
@@ -129,7 +157,7 @@ export function WSClientProvider({
   const connect = useCallback(
     (url: string, serverName?: string) => {
       if (!url) {
-        setState((prev) => ({ ...prev, error: 'WebSocket URL is required' }))
+        setState((prev) => ({ ...prev, error: 'WebSocket URL is required', errorSource: 'manual' }))
         return
       }
 
@@ -139,6 +167,8 @@ export function WSClientProvider({
         serverName,
         connected: false,
         error: undefined,
+        errorSource: undefined,
+        connectionError: undefined,
       }))
 
       connectQuery.start(url)
@@ -152,6 +182,7 @@ export function WSClientProvider({
       setState((prev) => ({
         ...prev,
         connected: false,
+        connectionError: undefined,
       }))
     }
   }, [connectQuery.data])
@@ -159,14 +190,16 @@ export function WSClientProvider({
   const send = useCallback(() => {
     const payloadText = state.draft.payloadText?.trim()
     if (!payloadText) {
-      setState((prev) => ({ ...prev, error: 'Payload cannot be empty' }))
+      setState((prev) => ({ ...prev, error: 'Payload cannot be empty', errorSource: 'manual' }))
       return
     }
 
     if (!connectQuery.data) {
-      setState((prev) => ({ ...prev, error: 'Connect to a server before sending messages' }))
+      setState((prev) => ({ ...prev, error: 'Connect to a server before sending messages', errorSource: 'manual' }))
       return
     }
+
+    setState((prev) => ({ ...prev, error: undefined, errorSource: undefined }))
 
     sendQuery.start({
       fetcher: connectQuery.data,

@@ -32,6 +32,7 @@ import {
 } from './utils/client-layout'
 import { resolveClientServers } from './utils/ws-client'
 import { resolveAsyncAPIDocument } from '../utils/document'
+import { getOperationAnchorId } from '../utils/anchors'
 import type { ReactNode, JSX } from 'react'
 import { SectionCard } from './components/section-card'
 
@@ -228,7 +229,7 @@ async function renderOperationBlock(
     channelHref: options.channelHref,
   })
 
-  if (!cardData.tabs.length) {
+  if (!cardData.messages.length && !cardData.replies.length) {
     return (
       <SectionCard title="Operation Details">
         <p className="text-sm text-muted-foreground">
@@ -239,7 +240,14 @@ async function renderOperationBlock(
   }
 
   const OperationCard = await getOperationCard()
-  return <OperationCard operation={cardData} />
+  const operationAnchorId = getOperationAnchorId({
+    operationId: block.operation.operationId ?? block.operation.id ?? cardData.id,
+    id: cardData.id,
+    title: cardData.title,
+    channelName: cardData.channelName,
+  })
+
+  return <OperationCard operation={cardData} anchorId={operationAnchorId} />
 }
 
 function renderChannelReference(

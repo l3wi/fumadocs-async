@@ -32,8 +32,8 @@ export function OperationActions({
       operationId: operation.operationId ?? operation.id,
       operationName: operation.summary ?? operation.operationId ?? operation.id,
       operationDirection: operation.direction,
-      tabName: message?.title ?? message?.name,
-      tabType: 'message' as const,
+      messageName: message?.title ?? message?.name,
+      messageType: 'message' as const,
     }
     const resolvedPayload = await runDraftPayloadTransformer(
       payloadTransformer,

@@ -29,17 +29,15 @@
 
 .asyncapi-sidebar-log {
   border-radius: 1rem;
-  border: 1px solid var(--asyncapi-sidebar-entry-border);
-  background: var(--asyncapi-sidebar-entry-bg);
-  padding: 0.85rem;
+  padding: 0.5rem;
 }
 
 .asyncapi-sidebar-entry {
   border-radius: 0.9rem;
   border: 1px solid var(--asyncapi-sidebar-entry-border);
-  background: var(--asyncapi-sidebar-entry-bg);
   padding: 0.75rem;
   color: var(--asyncapi-sidebar-entry-text);
+  position: relative;
   font-family: var(
     --default-mono-font-family,
     ui-monospace,
@@ -68,6 +66,38 @@
   font-size: 0.65rem;
 }
 
+.asyncapi-sidebar-entry__copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  padding: 0.2rem;
+  color: var(--asyncapi-sidebar-entry-text);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.dark .asyncapi-sidebar-entry__copy {
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.asyncapi-sidebar-entry__copy svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.asyncapi-sidebar-entry__copy:hover,
+.asyncapi-sidebar-entry__copy:focus-visible,
+.asyncapi-sidebar-entry__copy--active {
+  border-color: var(--asyncapi-sidebar-entry-border);
+  color: var(--asyncapi-sidebar-entry-code-color);
+}
+
 .asyncapi-sidebar-entry__pill {
   border: 1px solid currentColor;
   border-radius: 9999px;
@@ -89,28 +119,47 @@
 }
 
 .asyncapi-sidebar-entry__payload {
-  margin: 0;
   border-radius: 0.75rem;
   background: var(--asyncapi-sidebar-entry-code-bg);
   color: var(--asyncapi-sidebar-entry-code-color);
-  font-family: inherit;
-  font-size: 0.75rem;
   padding: 0.65rem;
-  max-height: 16rem;
-  overflow: auto;
 }
 
-.asyncapi-sidebar-entry__payload::-webkit-scrollbar {
+.asyncapi-sidebar-entry__payload-text {
+  position: relative;
+  margin: 0;
+  display: block;
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: inherit;
+  background: transparent;
+  white-space: normal;
+}
+
+.asyncapi-sidebar-entry__payload-content {
+  display: block;
+  margin: 0;
+  max-height: 16rem;
+  overflow: auto;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: transparent;
+  white-space: pre-wrap;
+  padding-right: 1.5rem;
+}
+
+.asyncapi-sidebar-entry__payload-content::-webkit-scrollbar {
   width: 0.35rem;
   height: 0.35rem;
 }
 
-.asyncapi-sidebar-entry__payload::-webkit-scrollbar-thumb {
+.asyncapi-sidebar-entry__payload-content::-webkit-scrollbar-thumb {
   background: var(--asyncapi-sidebar-entry-border);
   border-radius: 999px;
 }
 
-.asyncapi-sidebar-entry__payload::-webkit-scrollbar-track {
+.asyncapi-sidebar-entry__payload-content::-webkit-scrollbar-track {
   background: transparent;
 }
 

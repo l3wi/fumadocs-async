@@ -6,10 +6,10 @@ export type {
   AsyncRenderContext,
 } from '../types'
 export type {
-  OperationTabData,
+  OperationMessageData,
   OperationParameterData,
 } from './components/operation-card.types'
-export { createMessageTabData } from './utils/message-tab'
+export { createOperationMessageData } from './utils/message-tab'
 export {
   resolveAsyncAPIDocument,
   toSerializableProcessedDocument,
