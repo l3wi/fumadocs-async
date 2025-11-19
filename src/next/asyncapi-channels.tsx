@@ -1,13 +1,11 @@
-import type { AsyncAPIPageProps, AsyncAPIServer, ChannelInfo, OperationInfo } from '../types'
-import { resolveAsyncAPIDocument } from '../utils/document'
+import type { ChannelInfo, OperationInfo, ProcessedAsyncDocument } from '../types'
 import { getChannelAnchorId, slugify } from './helpers'
 import { TagBadge } from './tag-badge'
 import { ChannelTag } from '../ui/components/channel-tag'
 import { getOperationTitle } from '../ui/utils/operation-card'
 
 interface AsyncAPIChannelsPageProps {
-  document: AsyncAPIPageProps['document']
-  server?: AsyncAPIServer
+  document: ProcessedAsyncDocument
   channelHref?: (channel: ChannelInfo) => string | undefined
   tagHref?: (tag: string) => string | undefined
   operationHref?: (operation: OperationInfo) => string | undefined
@@ -15,12 +13,11 @@ interface AsyncAPIChannelsPageProps {
 
 export async function AsyncAPIChannelsPage({
   document,
-  server,
   channelHref,
   tagHref,
   operationHref,
 }: AsyncAPIChannelsPageProps) {
-  const processed = await resolveAsyncAPIDocument(document, server)
+  const processed = document
   const channels = processed.channels ?? []
 
   // Provide default tagHref if not supplied

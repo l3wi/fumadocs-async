@@ -127,32 +127,9 @@ export function WSClientProvider({
     return fetcher
   })
 
-  const sendQuery = useQuery(
-    async (data: { fetcher: any; payload: string; channel?: string }) => {
-      await data.fetcher.send({ data: data.payload })
-      
-      // Add sent message to state
-      let parsed: unknown = data.payload
-      try {
-        parsed = JSON.parse(data.payload)
-      } catch {
-        parsed = data.payload
-      }
-
-      const entry: WSMessageEntry = {
-        id: createMessageId(),
-        direction: 'out',
-        channel: data.channel,
-        payload: parsed,
-        timestamp: Date.now(),
-      }
-
-      setState((prev) => ({
-        ...prev,
-        messages: [entry, ...prev.messages].slice(0, 100),
-      }))
-    }
-  )
+  const sendQuery = useQuery(async (data: { fetcher: WSFetcher; payload: string }) => {
+    await data.fetcher.send({ data: data.payload })
+  })
 
   const connect = useCallback(
     (url: string, serverName?: string) => {
@@ -204,7 +181,6 @@ export function WSClientProvider({
     sendQuery.start({
       fetcher: connectQuery.data,
       payload: payloadText,
-      channel: state.draft.channel,
     })
   }, [connectQuery.data, state.draft, sendQuery])
 

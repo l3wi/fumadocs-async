@@ -1,13 +1,9 @@
 import type {
   AsyncAPIPageClientOptions,
-  AsyncAPIPageProps,
-  AsyncAPIServer,
   OperationInfo,
   ProcessedAsyncDocument,
   ChannelInfo,
 } from '../types'
-import { resolveAsyncAPIDocument } from '../utils/document'
-import type { OperationCardRenderData } from '../ui/components/operation-card.types'
 import type { ServerOption } from '../components/ws-client/types'
 import { buildOperationCardRenderData } from '../ui/utils/operation-card'
 import { resolveClientServers } from '../ui/utils/ws-client'
@@ -30,8 +26,7 @@ type AsyncAPIMessagesClientOptions = Pick<
 >
 
 interface AsyncAPIMessagesPageProps {
-  document: AsyncAPIPageProps['document']
-  server?: AsyncAPIServer
+  document: ProcessedAsyncDocument
   channelHref?: (operation: OperationInfo) => string | undefined
   tagHref?: (tag: string) => string | undefined
   client?: AsyncAPIMessagesClientOptions
@@ -39,16 +34,15 @@ interface AsyncAPIMessagesPageProps {
 
 export async function AsyncAPIMessagesPage({
   document,
-  server,
   channelHref,
   tagHref,
   client,
 }: AsyncAPIMessagesPageProps) {
-  const processed = await resolveAsyncAPIDocument(document, server)
+  const processed = document
   const operations = processed.operations ?? []
 
   const relevant = operations.filter(
-    (op) => (op.messages?.length ?? 0) > 0 || (op.reply?.messages?.length ?? 0) > 0
+    op => (op.messages?.length ?? 0) > 0 || (op.reply?.messages?.length ?? 0) > 0
   )
 
   if (relevant.length === 0) {
@@ -60,12 +54,10 @@ export async function AsyncAPIMessagesPage({
   }
 
   const channelMap = buildChannelLookup(processed.channels ?? [])
-  const operationsData = relevant.map((operation) => {
+  const operationsData = relevant.map(operation => {
     const channel = channelMap.get(operation.channel) ?? createFallbackChannel(operation)
     return buildOperationCardRenderData(channel, operation, {
-      channelHref: channelHref
-        ? () => channelHref(operation)
-        : undefined,
+      channelHref: channelHref ? () => channelHref(operation) : undefined,
     })
   })
 
@@ -89,10 +81,7 @@ async function resolveMessagesClientConfig(
     return null
   }
 
-  const servers = await resolveClientServers(
-    processed,
-    client?.servers ?? undefined
-  )
+  const servers = await resolveClientServers(processed, client?.servers ?? undefined)
   return {
     title: client?.title,
     servers,
@@ -100,7 +89,7 @@ async function resolveMessagesClientConfig(
 }
 
 function buildChannelLookup(channels: ChannelInfo[]): Map<string, ChannelInfo> {
-  return new Map(channels.map((channel) => [channel.name, channel]))
+  return new Map(channels.map(channel => [channel.name, channel]))
 }
 
 function createFallbackChannel(operation: OperationInfo): ChannelInfo {

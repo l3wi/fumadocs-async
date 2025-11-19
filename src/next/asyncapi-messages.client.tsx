@@ -21,14 +21,17 @@ export function AsyncAPIMessagesClient({ operations, client }: AsyncAPIMessagesC
 
   const content = (
     <div className="space-y-12">
-      {operations.map(operation => {
+      {operations.map((operation, index) => {
         const anchorId = getOperationAnchorId({
           id: operation.id,
           title: operation.title,
           channelName: operation.channelName,
         })
+        const operationKey = `${operation.id ?? anchorId}-${index}`
 
-        return <OperationCard key={operation.id} operation={operation} anchorId={anchorId} />
+        return (
+          <OperationCard key={operationKey} operation={operation} anchorId={anchorId} />
+        )
       })}
     </div>
   )

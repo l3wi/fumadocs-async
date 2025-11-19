@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { SVGProps } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CopyButton } from '../../ui/components/copy-button.client'
 import { useWSClient } from './provider'
 import type { ServerOption, WSMessageEntry } from './types'
 
@@ -30,14 +30,18 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
     servers[0]?.url ?? ''
   )
   const [customUrl, setCustomUrl] = useState<string>(url ?? '')
-  const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null)
   const [statusOverride, setStatusOverride] = useState<'failed' | null>(null)
-
-  useEffect(() => {
-    if (!copiedEntryId) return
-    const timeout = window.setTimeout(() => setCopiedEntryId(null), 1600)
-    return () => window.clearTimeout(timeout)
-  }, [copiedEntryId])
+  const seenMessageIdsRef = useRef<Set<string>>(new Set())
+  const newlySeenMessages = useMemo(() => {
+    const seen = seenMessageIdsRef.current
+    const newlySeen = new Set<string>()
+    for (const message of messages) {
+      if (!seen.has(message.id)) {
+        newlySeen.add(message.id)
+      }
+    }
+    return newlySeen
+  }, [messages])
 
   useEffect(() => {
     if (!connectionError || connected) return
@@ -51,6 +55,20 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
       setStatusOverride(null)
     }
   }, [connected])
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      seenMessageIdsRef.current.clear()
+      return
+    }
+
+    if (newlySeenMessages.size === 0) {
+      return
+    }
+
+    const seen = seenMessageIdsRef.current
+    newlySeenMessages.forEach((id) => seen.add(id))
+  }, [messages.length, newlySeenMessages])
 
   const currentServerName = useMemo(
     () =>
@@ -79,27 +97,6 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
         : 'border-transparent bg-muted text-muted-foreground'
   const activeUrl = url ?? customUrl ?? selectedServer ?? ''
   const showUrlInput = servers.length === 0 || selectedServer === ''
-
-  const copyEntry = useCallback(async (entry: WSMessageEntry) => {
-    const text = buildEntryCopyText(entry)
-    if (!text) return
-
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.style.position = 'fixed'
-      textarea.style.top = '-1000px'
-      document.body.appendChild(textarea)
-      textarea.focus()
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-    }
-
-    setCopiedEntryId(entry.id)
-  }, [])
 
   return (
     <aside className="asyncapi-sidebar h-full text-sm">
@@ -233,7 +230,7 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
 
             <div className="asyncapi-sidebar-log mt-2 max-h-72 space-y-2 overflow-auto rounded-lg border border-border/70 bg-background/80 p-2 xl:flex-1 xl:max-h-none xl:min-h-0 xl:h-full">
               {messages.length === 0 && (
-                <p className="text-xs text-muted-foreground">No messages yet.</p>
+                <p className="text-xs text-muted-foreground text-center">No messages yet.</p>
               )}
 
               {messages.map((message) => {
@@ -241,12 +238,14 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
                 const timestamp = new Date(message.timestamp)
                 const hasPayload = message.payload !== undefined && message.payload !== null
                 const formattedPayload = hasPayload ? formatPayload(message.payload) : ''
-                const isCopied = copiedEntryId === message.id
+                const isNewMessage = newlySeenMessages.has(message.id)
+
                 const headerClass = [
                   'asyncapi-sidebar-entry',
                   message.direction === 'out'
                     ? 'asyncapi-sidebar-entry--out'
                     : 'asyncapi-sidebar-entry--in',
+                  isNewMessage ? 'asyncapi-sidebar-entry--new' : null,
                 ].join(' ')
 
                 return (
@@ -266,14 +265,12 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
                     {hasPayload && (
                       <div className="asyncapi-sidebar-entry__payload">
                         <pre className="asyncapi-sidebar-entry__payload-text relative">
-                          <button
-                            type="button"
-                            className={`asyncapi-sidebar-entry__copy${isCopied ? ' asyncapi-sidebar-entry__copy--active' : ''}`}
-                            aria-label={isCopied ? 'Copied entry' : 'Copy entry'}
-                            onClick={() => copyEntry(message)}
-                          >
-                            {isCopied ? <CheckIcon /> : <CopyIcon />}
-                          </button>
+                          <CopyButton
+                            className="asyncapi-sidebar-entry__copy"
+                            activeClassName="asyncapi-sidebar-entry__copy--active"
+                            ariaLabel="Copy entry"
+                            getText={() => buildEntryCopyText(message)}
+                          />
                           <code className="asyncapi-sidebar-entry__payload-content not-prose">
                             {formattedPayload}
                           </code>
@@ -314,43 +311,4 @@ function buildEntryCopyText(entry: WSMessageEntry): string {
   }
 
   return lines.join('\n').trim()
-}
-
-function CopyIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-    </svg>
-  )
-}
-
-function CheckIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  )
 }

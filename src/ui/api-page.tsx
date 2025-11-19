@@ -1,7 +1,6 @@
 import type {
   AsyncAPIPageProps,
   AsyncAPIDocument,
-  AsyncAPIServer,
   AsyncCreatePageOptions,
   AsyncRenderContext,
   AsyncAPIPageClientOptions,
@@ -31,8 +30,8 @@ import {
   renderClientSidebar,
 } from './utils/client-layout'
 import { resolveClientServers } from './utils/ws-client'
-import { resolveAsyncAPIDocument } from '../utils/document'
 import { getOperationAnchorId } from '../utils/anchors'
+import { Fragment } from 'react'
 import type { ReactNode, JSX } from 'react'
 import { SectionCard } from './components/section-card'
 
@@ -57,11 +56,10 @@ async function getOperationActions(): Promise<OperationActionsComponent> {
 }
 
 export function createAsyncAPIPage(
-  server: AsyncAPIServer,
   options: AsyncCreatePageOptions = {}
 ) {
   const AsyncAPIPage = async (props: AsyncAPIPageProps) => {
-    const processed = await resolveAsyncAPIDocument(props.document, server)
+    const processed = props.document
     const renderCtx = createRenderContext(processed)
     const channelBlocks = await buildChannelBlocks(processed, options, props)
 
@@ -154,7 +152,19 @@ async function renderChannelBlock(
     )
   )
 
-  return <div className="flex flex-col gap-6">{operations}</div>
+  return (
+    <div className="flex flex-col gap-6">
+      {operations.map((operationNode, index) => {
+        const source = block.operations[index]?.operation
+        const operationKey =
+          source?.operationId ??
+          source?.id ??
+          `${block.channel.name}-${source?.direction ?? 'unknown'}-${index}`
+
+        return <Fragment key={operationKey}>{operationNode}</Fragment>
+      })}
+    </div>
+  )
 }
 
 async function renderOperationBlock(

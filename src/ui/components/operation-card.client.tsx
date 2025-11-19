@@ -33,7 +33,7 @@ export function OperationCard({ operation, anchorId }: OperationCardProps) {
   return (
     <div
       id={cardAnchorId}
-      className="space-y-5 rounded-2xl border border-border/60 bg-card/50 p-6 text-sm shadow-sm"
+      className="space-y-5 p-6 text-sm"
     >
       <header className="space-y-3">
         {operation.direction === 'publish' && (

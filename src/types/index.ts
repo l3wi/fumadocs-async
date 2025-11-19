@@ -176,11 +176,7 @@ export interface AsyncRenderContext {
 }
 
 export interface AsyncAPIPageProps {
-  document:
-    | Promise<AsyncAPIDocument>
-    | AsyncAPIDocument
-    | string
-    | ProcessedAsyncDocument
+  document: ProcessedAsyncDocument
   operations?: OperationInfo[]
   channel?: string | string[]
   direction?: 'publish' | 'subscribe'

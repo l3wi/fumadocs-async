@@ -7,6 +7,22 @@
  */
 @source '../**/*.js';
 
+:root {
+  --asyncapi-sidebar-entry-border: rgba(0, 92, 197, 0.25);
+  --asyncapi-sidebar-entry-bg: rgba(0, 92, 197, 0.04);
+  --asyncapi-sidebar-entry-code-bg: rgba(0, 92, 197, 0.08);
+  --asyncapi-sidebar-entry-code-color: #005cc5;
+  --asyncapi-sidebar-entry-text: #1f2937;
+}
+
+.dark {
+  --asyncapi-sidebar-entry-border: rgba(121, 184, 255, 0.35);
+  --asyncapi-sidebar-entry-bg: rgba(121, 184, 255, 0.08);
+  --asyncapi-sidebar-entry-code-bg: rgba(121, 184, 255, 0.12);
+  --asyncapi-sidebar-entry-code-color: #79b8ff;
+  --asyncapi-sidebar-entry-text: rgba(255, 255, 255, 0.85);
+}
+
 .asyncapi-sidebar {
   --shiki-light: #005cc5;
   --shiki-dark: #79b8ff;
@@ -33,9 +49,9 @@
 }
 
 .asyncapi-sidebar-entry {
+  /* border: 1px solid var(--asyncapi-sidebar-entry-border); */
   border-radius: 0.9rem;
-  border: 1px solid var(--asyncapi-sidebar-entry-border);
-  padding: 0.75rem;
+  padding: 0.3rem;
   color: var(--asyncapi-sidebar-entry-text);
   position: relative;
   font-family: var(
@@ -56,6 +72,27 @@
   gap: 0.5rem;
 }
 
+@keyframes asyncapi-sidebar-entry-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.asyncapi-sidebar-entry--new {
+  animation: asyncapi-sidebar-entry-slide-in 0.22s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asyncapi-sidebar-entry--new {
+    animation: none;
+  }
+}
+
 .asyncapi-sidebar-entry__header {
   display: flex;
   align-items: center;
@@ -66,11 +103,8 @@
   font-size: 0.65rem;
 }
 
+.asyncapi-copy-button,
 .asyncapi-sidebar-entry__copy {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -82,20 +116,39 @@
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
+.asyncapi-sidebar-entry__copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+}
+
+.dark .asyncapi-copy-button,
 .dark .asyncapi-sidebar-entry__copy {
   background: rgba(15, 23, 42, 0.85);
 }
 
+.asyncapi-copy-button svg,
 .asyncapi-sidebar-entry__copy svg {
   width: 1rem;
   height: 1rem;
 }
 
+.asyncapi-copy-button:hover,
+.asyncapi-copy-button:focus-visible,
+.asyncapi-copy-button--active,
 .asyncapi-sidebar-entry__copy:hover,
 .asyncapi-sidebar-entry__copy:focus-visible,
 .asyncapi-sidebar-entry__copy--active {
   border-color: var(--asyncapi-sidebar-entry-border);
   color: var(--asyncapi-sidebar-entry-code-color);
+}
+
+.asyncapi-message-copy-button {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1;
 }
 
 .asyncapi-sidebar-entry__pill {

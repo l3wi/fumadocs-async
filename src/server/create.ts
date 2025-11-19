@@ -234,26 +234,48 @@ function resolveStringTarget(value: string): string | undefined {
 }
 
 function resolveParser(): typeof AsyncAPIParser {
-  const candidateFiles = [
-    safePackageJsonPath(process.cwd()),
-    safeModulePackageJson(),
-  ].filter(Boolean) as string[]
+  const candidates: Array<string | URL> = []
+  const seen = new Set<string>()
 
-  for (const pkgPath of candidateFiles) {
+  const workspacePackage = safePackageJsonPath(process.cwd())
+  if (workspacePackage) {
+    candidates.push(workspacePackage)
+  }
+
+  const modulePackage = safeModulePackageJson()
+  if (modulePackage) {
+    candidates.push(modulePackage)
+  }
+
+  candidates.push(import.meta.url)
+
+  let lastError: unknown
+
+  for (const candidate of candidates) {
+    const key = typeof candidate === 'string' ? candidate : candidate.toString()
+    if (seen.has(key)) continue
+    seen.add(key)
+
     try {
-      const localRequire = createRequire(pkgPath)
+      const localRequire = createRequire(candidate)
       const mod = localRequire('@asyncapi/parser') as { Parser: typeof AsyncAPIParser }
       if (mod?.Parser) {
         return mod.Parser
       }
-    } catch {
+    } catch (error) {
+      lastError = error
       // fall through to the next candidate
     }
   }
 
-  throw new Error(
+  const message =
     'fumadocs-asyncapi: unable to load @asyncapi/parser. Make sure it is installed in your application.'
-  )
+
+  if (lastError instanceof Error) {
+    throw new Error(`${message}\n${lastError.message}`)
+  }
+
+  throw new Error(message)
 }
 
 function safePackageJsonPath(dir: string): string | undefined {

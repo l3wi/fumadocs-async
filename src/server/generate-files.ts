@@ -166,3 +166,4 @@ function formatArrayAttribute(values: string[]): string {
   const serialized = values.map((value) => `"${escapeAttribute(value)}"`).join(', ')
   return `{[${serialized}]}`
 }
+

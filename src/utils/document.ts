@@ -8,7 +8,7 @@ import { createAsyncAPI } from '../server/create'
 import { processDocument } from '../server/create/process-document'
 
 export async function resolveAsyncAPIDocument(
-  documentInput: AsyncAPIPageProps['document'],
+  documentInput: ProcessedAsyncDocument | string | AsyncAPIDocument | Promise<AsyncAPIDocument>,
   server?: AsyncAPIServer
 ): Promise<ProcessedAsyncDocument> {
   if (documentInput instanceof Promise) {

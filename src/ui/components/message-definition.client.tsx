@@ -1,9 +1,9 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { SVGProps } from 'react'
 import type { BundledLanguage } from 'shiki'
 import type { OperationMessageData } from './operation-card.types'
+import { CopyButton } from './copy-button.client'
 import { useOptionalWSClient } from '../../components/ws-client'
 import { useMessagePayloadTransformer } from '../state/message-payload-transformer'
 import { runDraftPayloadTransformer } from '../utils/payload-transformer'
@@ -64,14 +64,6 @@ export function MessageDefinitionPanel({
     }
     const resolvedPayload = await runDraftPayloadTransformer(payloadTransformer, payload, meta)
     client.pushDraft({ channel: channelName, payload: resolvedPayload })
-  }
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(exampleString)
-    } catch {
-      // ignore clipboard errors
-    }
   }
 
   return (
@@ -152,14 +144,11 @@ export function MessageDefinitionPanel({
         </div>
 
         <div className="relative border-t border-border bg-card">
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="absolute top-3 right-3 inline-flex items-center justify-center rounded-lg border border-border/70 bg-background/80 p-1 text-muted-foreground transition hover:text-foreground"
-            aria-label="Copy payload"
-          >
-            <CopyIcon className="h-4 w-4" />
-          </button>
+          <CopyButton
+            className="asyncapi-message-copy-button"
+            ariaLabel="Copy payload"
+            text={exampleString}
+          />
 
           <div className="max-h-[360px] overflow-auto px-4 py-4 text-xs">
             {highlighted ? (
@@ -182,20 +171,4 @@ function formatJSON(value: unknown) {
   } catch {
     return String(value ?? '')
   }
-}
-
-function CopyIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={2}
-      stroke="currentColor"
-      {...props}
-    >
-      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-    </svg>
-  )
 }

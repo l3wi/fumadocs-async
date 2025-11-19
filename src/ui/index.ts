@@ -10,9 +10,5 @@ export type {
   OperationParameterData,
 } from './components/operation-card.types'
 export { createOperationMessageData } from './utils/message-tab'
-export {
-  resolveAsyncAPIDocument,
-  toSerializableProcessedDocument,
-} from '../utils/document'
 
 // Client components - these must be dynamically imported
