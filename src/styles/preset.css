@@ -75,7 +75,7 @@
 @keyframes asyncapi-sidebar-entry-slide-in {
   from {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateY(-12px);
   }
   to {
     opacity: 1;
@@ -84,7 +84,7 @@
 }
 
 .asyncapi-sidebar-entry--new {
-  animation: asyncapi-sidebar-entry-slide-in 0.22s ease-out both;
+  animation: asyncapi-sidebar-entry-slide-in 0.35s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -118,8 +118,8 @@
 
 .asyncapi-sidebar-entry__copy {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 0.4rem;
+  right: 0.5rem;
   z-index: 1;
 }
 

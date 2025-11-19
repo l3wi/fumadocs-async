@@ -59,6 +59,7 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
   useEffect(() => {
     if (messages.length === 0) {
       seenMessageIdsRef.current.clear()
+      newlySeenMessages.clear()
       return
     }
 
@@ -68,7 +69,8 @@ export function WSSidebar({ title = 'WebSocket Client', servers = [] }: SidebarP
 
     const seen = seenMessageIdsRef.current
     newlySeenMessages.forEach((id) => seen.add(id))
-  }, [messages.length, newlySeenMessages])
+    newlySeenMessages.clear()
+  }, [messages, newlySeenMessages])
 
   const currentServerName = useMemo(
     () =>
