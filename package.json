@@ -1,6 +1,6 @@
 {
   "name": "fumadocs-async",
-  "version": "0.1.2",
+  "version": "0.1.5",
   "description": "AsyncAPI integration for Fumadocs - generate documentation pages from AsyncAPI specifications with WebSocket client support",
   "keywords": [
     "asyncapi",
